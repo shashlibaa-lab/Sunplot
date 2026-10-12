@@ -844,6 +844,12 @@ input[type=range]{width:100%;accent-color:var(--sun);height:28px}
 .suggest button{text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:11px 12px;font:500 .92rem var(--f-body);color:var(--ink);cursor:pointer}
 .suggest button:last-child{border-bottom:0}
 .suggest button:hover,.suggest button:focus-visible{background:var(--paper)}
+/* privacy and dialogs */
+.linkbtn{display:inline-flex;align-items:center;text-decoration:none}
+.modal{position:fixed;inset:0;z-index:900;background:rgba(10,16,12,.55);display:grid;place-items:end center;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+.mcard{background:var(--paper);color:var(--ink);border-radius:16px;padding:18px;max-width:420px;width:100%;display:grid;gap:12px;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+.mcard a{color:var(--ink);text-decoration-color:var(--sun)}
+@media (min-width:820px){.modal{place-items:center}}
 /* parcel details */
 .pdata{display:grid;gap:6px}
 .pd{background:var(--paper-2);border-radius:10px;overflow:hidden}
@@ -978,6 +984,15 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
   <button class="fab" id="btnFit" aria-label="Show whole property" title="Whole property" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
 </div>
 
+<div class="modal" id="locSheet" hidden role="dialog" aria-modal="true" aria-labelledby="locTitle">
+  <div class="mcard">
+    <h2 id="locTitle">Use your location?</h2>
+    <p>Sunplot uses your location only to center the map where you are and look up that property. It isn't stored or sent to us. Your phone will ask you to allow it next.</p>
+    <div class="row grow"><button class="btn" id="locNo" type="button">Not now</button><button class="btn primary" id="locYes" type="button">Continue</button></div>
+    <p class="note"><a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a></p>
+  </div>
+</div>
+
 <div class="banner" id="banner" hidden><span id="bannerText"></span><button id="bannerBtn">Done</button></div>
 
 <section class="sheet" id="sheet" aria-label="Controls">
@@ -1001,7 +1016,7 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
         <div class="list" id="saved"></div>
       </div>
       <p class="note" id="coverage"></p>
-      <button class="btn ghost" id="btnCheck" style="justify-self:start">Check map sources</button>
+      <div class="row"><button class="btn ghost" id="btnCheck">Check map sources</button><a class="btn ghost linkbtn" href="privacy.html" target="_blank" rel="noopener">Privacy policy</a></div>
     </div>
 
     <!-- 8. Check map sources -->
@@ -1066,7 +1081,7 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
         <div class="pdata" id="dData"></div>
         <p class="status" id="planWeek" hidden></p>
         <div class="row grow"><button class="btn" id="btnReport">Full report</button><button class="btn" id="btnTodo">Planting calendar</button></div>
-        <button class="btn ghost" id="btnPrint" style="justify-self:start">Print or save as PDF</button>
+        <div class="row"><button class="btn ghost" id="btnPrint">Print or save as PDF</button><button class="btn ghost danger" id="btnDeletePlace">Delete this place</button></div>
       </div>
 
       <div class="tabp" id="tp-layers" hidden>
@@ -1770,7 +1785,9 @@ const CONFIG = {
   /* Parcel details show every field the county publishes, including owner names and mailing addresses
      (public record). Set to false to hide owner and mailing fields. */
   showOwners: true,
-  contact: '',  // optional support email shown on the printed plan
+  contact: '',  // support email, shown on the printed plan and in parcel records
+  /* Owners who asked to have their name and mailing address hidden: parcel numbers or site addresses, as shown in the record. */
+  ownerOptOut: [],
   /* Optional relay for county map servers that refuse requests from apps. Deploy relay/worker.js
      (see README) and paste its address here, e.g. 'https://sunplot-relay.yourname.workers.dev'. */
   relay: ''
@@ -2279,13 +2296,20 @@ $('q').addEventListener('input', () => {
 });
 $('q').addEventListener('blur', () => setTimeout(hideSuggest, 200));
 $('btnLocate').onclick = () => {
+  let ok = false; try { ok = localStorage.getItem('sunplot.locOk') === '1'; } catch {}
+  if (ok) return locateMe();
+  $('locSheet').hidden = false;
+};
+$('locNo').onclick = () => { $('locSheet').hidden = true; };
+$('locYes').onclick = () => { $('locSheet').hidden = true; try { localStorage.setItem('sunplot.locOk', '1'); } catch {} locateMe(); };
+function locateMe() {
   if (!navigator.geolocation) return;
   navigator.geolocation.getCurrentPosition(
     p => { map.setView([p.coords.latitude, p.coords.longitude], 18); if (mode === 'find') pickPoint(p.coords.latitude, p.coords.longitude, false); },
     () => { if (mode === 'find') { $('findStatus').className = 'status err'; $('findStatus').textContent = 'Location is off for this site. Search an address instead.'; } },
     { enableHighAccuracy: true, timeout: 10000 }
   );
-};
+}
 async function pickPoint(lat, lng, fly) {
   const st = $('findStatus'); st.className = 'status'; st.textContent = 'Looking up property lines…';
   if (fly) map.setView([lat, lng], 18);
@@ -2394,6 +2418,15 @@ function hint() {
   $('planStatus').textContent = !hasCasters ? 'First add the trees and buildings that shade your land. Tap Add trees, then tap each tree on the map.'
     : !hasBeds ? 'Now tap "Find the best spots" below, or add a bed yourself.' : '';
 }
+let delArmed = 0;
+$('btnDeletePlace').onclick = () => {
+  const btn = $('btnDeletePlace');
+  if (!delArmed) { delArmed = setTimeout(() => { delArmed = 0; btn.textContent = 'Delete this place'; }, 4000); btn.textContent = 'Tap again to delete'; return; }
+  clearTimeout(delArmed); delArmed = 0; btn.textContent = 'Delete this place';
+  const id = P.id; clearTimeout(saveTimer);
+  delete DB.projects[id]; DB.order = DB.order.filter(x => x !== id); store.save(DB);
+  $('btnAll').onclick();
+};
 $('btnAll').onclick = () => {
   clearGisLayers();
   P = null; for (const l of [lyBoundary, lyItems, lyHandle, lyShade, lyHeat, lyCont, lySpots]) l.clearLayers();
@@ -3592,10 +3625,13 @@ const PD_LOAD = {
       try { const m = await layerMeta(layer); for (const f of m.fields || []) fields[f.name.toLowerCase()] = f; } catch { /* labels fall back to cleaned-up names */ }
     }
     const rows = Object.entries(attrs)
-      .filter(([k]) => !HIDE_FIELD.test(k) && !/^shape/i.test(k) && (CONFIG.showOwners || !OWNER_FIELD.test(k)))
+      .filter(([k]) => !HIDE_FIELD.test(k) && !/^shape/i.test(k) && (CONFIG.showOwners && !optedOut(attrs) || !OWNER_FIELD.test(k)))
       .map(([k, v]) => { const f = fields[k.toLowerCase()], label = niceName(k, f); return [label, niceValue(`${k} ${label}`, v, f), /^https?:\/\//i.test(String(v)) ? String(v) : null]; })
       .filter(r => r[1] != null);
-    const n = pdRows(body, rows, `From ${source || 'the county parcel map'}. County records can lag recent sales and changes.`);
+    const n = pdRows(body, rows, `From ${source || 'the county parcel map'}. County records can lag recent sales and changes.${optedOut(attrs) ? ' Owner details hidden at the owner\'s request.' : ''}`);
+    const p = document.createElement('p'); p.className = 'note';
+    p.innerHTML = 'Is this your property? You can <a href="privacy.html#public-records" target="_blank" rel="noopener">ask us to hide owner details</a>.';
+    body.appendChild(p);
     count.textContent = `${n} fields`;
   },
   async location(ctx, body, count) {
@@ -3698,6 +3734,12 @@ const PD_LOAD = {
     count.textContent = `${n} links`;
   }
 };
+/** True when this parcel's owner asked to have their name and mailing address hidden. */
+function optedOut(attrs) {
+  if (!CONFIG.ownerOptOut.length || !attrs) return false;
+  const vals = Object.values(attrs).map(v => String(v ?? '').trim().toUpperCase()).filter(Boolean);
+  return CONFIG.ownerOptOut.some(x => vals.includes(String(x).trim().toUpperCase()));
+}
 function terrainStatsFor(T, xy) {
   let n = 0, sum = 0, gx = 0, gy = 0, lo = Infinity, hi = -Infinity, max = 0;
   for (let j = 0; j < T.n; j++) for (let i = 0; i < T.n; i++) {

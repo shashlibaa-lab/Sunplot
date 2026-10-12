@@ -24,6 +24,13 @@ Open the web address. On iPhone: Share → Add to Home Screen. On Android: menu 
 2. **Support email.** Put it in `CONFIG.contact`. It prints on every plan.
 3. **Data credits.** Keep the map attribution (bottom-right of the map) visible. It credits USGS, NC OneMap and the state parcel sources.
 
+## Privacy and Google Play paperwork
+
+- **Privacy policy:** `privacy.html` (live at `…/Sunplot/privacy.html`). Fill in the publisher name and support email before submitting, and put the same email in `CONFIG.contact`.
+- **Data safety answers:** `play-store/data-safety.md`.
+- **Owner opt-out:** when an owner asks to hide their details, add the parcel number or site address to `CONFIG.ownerOptOut` in `index.html` and publish. Their name and mailing address stop showing; the rest of the public record stays.
+- The app asks before using location, and every saved place can be deleted from its Overview tab.
+
 ## 4. App stores
 
 1. Go to pwabuilder.com and enter your web address. It checks the app and builds the store packages.
