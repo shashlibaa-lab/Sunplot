@@ -30,6 +30,12 @@ Open the web address. On iPhone: Share → Add to Home Screen. On Android: menu 
 - **Data safety answers:** `play-store/data-safety.md`.
 - **Owner opt-out:** when an owner asks to hide their details, add the parcel number or site address to `CONFIG.ownerOptOut` in `index.html` and publish. Their name and mailing address stop showing; the rest of the public record stays.
 - The app asks before using location, and every saved place can be deleted from its Overview tab.
+- **Terms of use:** `terms.html`. Fill in the publisher name and support email here too.
+
+## Backup and problem reports
+
+- **Backup:** the first screen has **Save a backup file** (downloads `sunplot-backup-DATE.json` with every saved place) and **Restore a backup** (adds the places back; places already on the phone are replaced after asking).
+- **Report a problem:** on the first screen and the Overview tab. It opens the user's email app addressed to `CONFIG.contact`, with the problem type, their note, the app version, phone, place, parcel source and the last few loading errors filled in. Set `CONFIG.contact` so reports reach you.
 
 ## 4. App stores
 
@@ -51,7 +57,7 @@ Before launch, open **Check map sources** (bottom of the first screen) on a phon
 Coverage limits:
 - Some counties only publish through paid viewers (Beacon, qPublic and similar). No free app can read those, so users there tap their corners.
 - Statewide layers in some states are missing a few counties (Washington, West Virginia, Arkansas, New York and Vermont say so in their own notes). The county finder covers many of those gaps.
-- Parcel fields differ by county. The app reads addresses, IDs, acres and values by pattern. Owner names are never shown.
+- Parcel fields differ by county. The app reads addresses, IDs, acres and values by pattern. Owner names show where the county publishes them.
 
 ### Adding another state
 

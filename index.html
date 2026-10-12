@@ -844,6 +844,15 @@ input[type=range]{width:100%;accent-color:var(--sun);height:28px}
 .suggest button{text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:11px 12px;font:500 .92rem var(--f-body);color:var(--ink);cursor:pointer}
 .suggest button:last-child{border-bottom:0}
 .suggest button:hover,.suggest button:focus-visible{background:var(--paper)}
+/* backup, report */
+.backup{display:grid;gap:8px;border-top:1px solid var(--line);padding-top:14px;margin-top:4px}
+.footlinks a{color:var(--muted);text-decoration-color:var(--sun);text-underline-offset:3px}
+.fld{display:grid;gap:6px;font-weight:600;font-size:.9rem}
+.fld textarea{width:100%;font:500 1rem var(--f-body);color:var(--ink);background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;resize:vertical}
+.fld textarea:focus-visible,.fld select:focus-visible{outline:2px solid var(--sun);outline-offset:2px}
+.rinfo summary{cursor:pointer;font-size:.85rem;color:var(--muted)}
+.rinfo pre{white-space:pre-wrap;word-break:break-word;font:.75rem/1.45 var(--f-mono);background:var(--paper-2);border-radius:8px;padding:10px;margin:8px 0 0;max-height:30vh;overflow:auto}
+#reportSheet .mcard{max-height:calc(100dvh - 32px);overflow:auto}
 /* layer loading pill */
 .maploading{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 64px);z-index:640;background:var(--pine);color:#f3f0e2;border-radius:999px;padding:7px 14px 7px 32px;font:600 .82rem var(--f-body);box-shadow:0 2px 10px rgba(0,0,0,.35);pointer-events:none}
 .maploading::before{content:"";position:absolute;left:12px;top:50%;width:12px;height:12px;margin-top:-6px;border-radius:50%;border:2px solid rgba(243,240,226,.35);border-top-color:var(--sun);animation:spin .8s linear infinite}
@@ -998,6 +1007,25 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
   </div>
 </div>
 
+<div class="modal" id="reportSheet" hidden role="dialog" aria-modal="true" aria-labelledby="reportTitle">
+  <form class="mcard" id="reportForm">
+    <h2 id="reportTitle">Report a problem</h2>
+    <label class="fld"><span>What went wrong?</span>
+      <select id="reportKind">
+        <option>Property lines are wrong or missing</option>
+        <option>Address search didn't find my place</option>
+        <option>A map layer won't load</option>
+        <option>Sun hours or shade look wrong</option>
+        <option>Garden or planting calendar problem</option>
+        <option>Something else</option>
+      </select></label>
+    <label class="fld"><span>Tell us more (optional)</span><textarea id="reportText" rows="3" placeholder="What did you expect to see?"></textarea></label>
+    <details class="rinfo"><summary>What the email includes</summary><pre id="reportInfo"></pre></details>
+    <p class="note" id="reportNote">This opens your email app with the report filled in. Nothing is sent until you press send there.</p>
+    <div class="row grow"><button class="btn" type="button" id="reportCancel">Cancel</button><button class="btn primary" type="submit">Open email</button></div>
+  </form>
+</div>
+
 <div class="maploading" id="mapLoading" hidden>Loading map layers…</div>
 
 <div class="banner" id="banner" hidden><span id="bannerText"></span><button id="bannerBtn">Done</button></div>
@@ -1022,8 +1050,16 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
         <span class="eyebrow">Your places</span>
         <div class="list" id="saved"></div>
       </div>
+      <div class="backup">
+        <span class="eyebrow">Backup</span>
+        <p class="note" id="backupNote"></p>
+        <div class="row grow"><button class="btn" id="btnBackup" type="button">Save a backup file</button><button class="btn" id="btnRestore" type="button">Restore a backup</button></div>
+        <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+        <p class="status" id="backupStatus" role="status" hidden></p>
+      </div>
       <p class="note" id="coverage"></p>
-      <div class="row"><button class="btn ghost" id="btnCheck">Check map sources</button><a class="btn ghost linkbtn" href="privacy.html" target="_blank" rel="noopener">Privacy policy</a></div>
+      <div class="row"><button class="btn ghost" id="btnCheck">Check map sources</button><button class="btn ghost" id="btnReportFind" type="button">Report a problem</button></div>
+      <p class="note footlinks"><a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a> · <a href="terms.html" target="_blank" rel="noopener">Terms of use</a></p>
     </div>
 
     <!-- 8. Check map sources -->
@@ -1088,7 +1124,7 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
         <div class="pdata" id="dData"></div>
         <p class="status" id="planWeek" hidden></p>
         <div class="row grow"><button class="btn" id="btnReport">Full report</button><button class="btn" id="btnTodo">Planting calendar</button></div>
-        <div class="row"><button class="btn ghost" id="btnPrint">Print or save as PDF</button><button class="btn ghost danger" id="btnDeletePlace">Delete this place</button></div>
+        <div class="row"><button class="btn ghost" id="btnPrint">Print or save as PDF</button><button class="btn ghost" id="btnReportPlan" type="button">Report a problem</button><button class="btn ghost danger" id="btnDeletePlace">Delete this place</button></div>
       </div>
 
       <div class="tabp" id="tp-layers" hidden>
@@ -1824,7 +1860,7 @@ const $ = id => document.getElementById(id);
 const store = {
   key: 'sunplot.v2',
   load() { try { return JSON.parse(localStorage.getItem(this.key)) || { projects: {}, order: [] }; } catch { return { projects: {}, order: [] }; } },
-  save(db) { try { localStorage.setItem(this.key, JSON.stringify(db)); } catch {} }
+  save(db) { try { localStorage.setItem(this.key, JSON.stringify(db)); return true; } catch { return false; } }
 };
 let DB = store.load(), saveTimer = 0;
 function saveProject() {
@@ -1835,13 +1871,22 @@ function saveProject() {
 
 const inBox = (b, lat, lng) => lng >= b[0] && lng <= b[2] && lat >= b[1] && lat <= b[3];
 /* ---------- network ---------- */
+/* Recent problems, kept in memory only, so "Report a problem" can say what failed. */
+const PROBLEMS = [];
+function hostOf(url) {
+  try { const u = new URL(url), svc = u.pathname.replace(/\/(query|identify|export|exportImage|getSamples)$/, '').split('/rest/services/')[1]; return u.host + (svc ? ' ' + svc.slice(0, 50) : ''); }
+  catch { return String(url).slice(0, 60); }
+}
+function logProblem(msg) { const t = new Date().toTimeString().slice(0, 5); if (PROBLEMS.length && PROBLEMS[PROBLEMS.length - 1].endsWith(msg)) return; PROBLEMS.push(`${t} ${msg}`); if (PROBLEMS.length > 8) PROBLEMS.shift(); }
+addEventListener('error', e => logProblem('Error: ' + (e.message || 'script')));
+addEventListener('unhandledrejection', e => logProblem('Error: ' + ((e.reason && e.reason.message) || e.reason || 'promise')));
 async function rawJSON(url, opts = {}, ms = 15000) {
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms);
   try {
     let r;
     try { r = await fetch(url, { ...opts, signal: ctl.signal }); }
-    catch (e) { if (e.name === 'AbortError') throw e; const n = new Error('Network or cross-site block'); n.net = true; throw n; }
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    catch (e) { logProblem((e.name === 'AbortError' ? 'Timed out ' : 'Blocked ') + hostOf(url)); if (e.name === 'AbortError') throw e; const n = new Error('Network or cross-site block'); n.net = true; throw n; }
+    if (!r.ok) { logProblem(`HTTP ${r.status} ${hostOf(url)}`); throw new Error('HTTP ' + r.status); }
     const j = await r.json();
     if (j && j.error) throw new Error(j.error.message || 'Service error');
     return j;
@@ -2211,10 +2256,106 @@ $('bannerBtn').onclick = () => {
 };
 $('coverage').textContent = `Property lines load from statewide maps in ${STATE_SOURCES.length - 1} states and DC, and from county maps found automatically everywhere else. Where no county map is public, you tap the corners of your land.`;
 
+/* ---------- backup and restore ---------- */
+const APP_VERSION = 'sunplot-v15', BACKUP_KEY = 'sunplot.lastBackup';
+function backupNote(n) {
+  let last = 0; try { last = +localStorage.getItem(BACKUP_KEY) || 0; } catch {}
+  $('btnBackup').hidden = !n;
+  $('backupNote').textContent = n
+    ? `Your ${n === 1 ? 'place is' : n + ' places are'} saved only on this phone. ${last ? 'Last backup ' + new Date(last).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + '.' : 'Save a backup file so a lost or new phone doesn\'t lose them.'}`
+    : 'New phone? Restore a backup file to bring your places back.';
+}
+function backupStatus(text, err) { const b = $('backupStatus'); b.hidden = !text; b.textContent = text || ''; b.classList.toggle('err', !!err); }
+$('btnBackup').onclick = () => {
+  const ids = DB.order.filter(i => DB.projects[i]);
+  const data = { app: 'Sunplot', kind: 'backup', format: 1, saved: new Date().toISOString(), order: ids, projects: Object.fromEntries(ids.map(i => [i, DB.projects[i]])) };
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const a = document.createElement('a'), url = URL.createObjectURL(blob);
+  a.href = url; a.download = `sunplot-backup-${new Date().toLocaleDateString('en-CA')}.json`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  try { localStorage.setItem(BACKUP_KEY, String(Date.now())); } catch {}
+  backupNote(ids.length);
+  backupStatus(`Saved ${a.download} to your Downloads. Keep a copy somewhere safe, like Google Drive or email.`);
+};
+$('btnRestore').onclick = () => { $('restoreFile').value = ''; $('restoreFile').click(); };
+function validProject(p) {
+  return p && typeof p === 'object' && typeof p.id === 'string' && Array.isArray(p.boundary) && p.boundary.length >= 3 &&
+    p.boundary.every(q => Array.isArray(q) && isFinite(q[0]) && isFinite(q[1])) && Array.isArray(p.items) && isFinite(p.lat0) && isFinite(p.lng0);
+}
+/** Merge a backup into this phone's places. Places in both are replaced by the backup's copy. */
+function restoreBackup(data) {
+  if (!data || data.app !== 'Sunplot' || !data.projects || typeof data.projects !== 'object') throw new Error("This isn't a Sunplot backup file.");
+  const got = Object.values(data.projects).filter(validProject);
+  if (!got.length) throw new Error('This backup has no places in it.');
+  const replaced = got.filter(p => DB.projects[p.id]).length;
+  if (replaced && !confirm(`${replaced === 1 ? 'One place' : replaced + ' places'} in this backup ${replaced === 1 ? 'is' : 'are'} already on this phone. Replace ${replaced === 1 ? 'it' : 'them'} with the backup's copy?`)) return null;
+  const before = JSON.stringify(DB);
+  const order = (Array.isArray(data.order) ? data.order : []).filter(i => got.some(p => p.id === i));
+  for (const p of got) { DB.projects[p.id] = p; if (!order.includes(p.id)) order.push(p.id); }
+  DB.order = [...order, ...DB.order.filter(i => !order.includes(i))];
+  if (!store.save(DB)) { DB = JSON.parse(before); throw new Error("There isn't enough room on this phone to restore it. Delete a place or two and try again."); }
+  return { added: got.length - replaced, replaced };
+}
+$('restoreFile').onchange = async e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  try {
+    if (f.size > 20e6) throw new Error("That file is too big to be a Sunplot backup.");
+    let data; try { data = JSON.parse(await f.text()); } catch { throw new Error("This isn't a Sunplot backup file."); }
+    const r = restoreBackup(data); if (!r) return;
+    renderSaved();
+    backupStatus(`Restored ${r.added + r.replaced} place${r.added + r.replaced === 1 ? '' : 's'}${r.replaced ? ` (${r.replaced} replaced)` : ''}.`);
+  } catch (err) { backupStatus(err.message, true); }
+  finally { e.target.value = ''; }
+};
+
+/* ---------- report a problem ---------- */
+function reportDetails() {
+  const L1 = [`App: ${APP_VERSION}`, `Phone: ${navigator.userAgent.replace(/\s*\(KHTML, like Gecko\)/, '').slice(0, 140)}`, `Screen: ${mode}`];
+  if (P) {
+    L1.push(`Place: ${P.name}${P.sub ? ' — ' + P.sub : ''}`);
+    if (P.parcel) L1.push(`Parcel: ${P.parcel.id || '?'} · ${P.parcel.county || '?'}, ${P.parcel.state || '?'} · from ${P.parcel.source || '?'}`);
+    else L1.push('Parcel: drawn by hand');
+    L1.push(`Spot: ${P.lat0.toFixed(5)}, ${P.lng0.toFixed(5)}`);
+    const g = P.gis; if (g) L1.push(`Map: ${g.base || 'aerial'}${g.base === 'past' && g.past ? ' ' + g.past : ''}; layers on: ${Object.keys(g.ov || {}).filter(k => g.ov[k]).join(', ') || 'none'}`);
+  } else if (candidate) {
+    L1.push(`Looking at: ${candidate.title || ''}${candidate.sub ? ' — ' + candidate.sub : ''}`);
+    if (candidate.src) L1.push(`From: ${candidate.src.label}`);
+    L1.push(`Spot: ${(+candidate.lat).toFixed(5)}, ${(+candidate.lng).toFixed(5)}`);
+  } else {
+    const q = $('q').value.trim(); if (q) L1.push(`Searched: ${q}`);
+    const st = $('findStatus').textContent.trim(); if (st) L1.push(`Status: ${st.slice(0, 160)}`);
+    const c = map.getCenter(); L1.push(`Map center: ${c.lat.toFixed(5)}, ${c.lng.toFixed(5)} (zoom ${map.getZoom()})`);
+  }
+  L1.push(PROBLEMS.length ? 'Recent problems:\n  ' + PROBLEMS.join('\n  ') : 'Recent problems: none logged');
+  return L1.join('\n');
+}
+function openProblemReport() {
+  $('reportInfo').textContent = reportDetails();
+  $('reportNote').textContent = CONFIG.contact
+    ? `This opens your email app with a message to ${CONFIG.contact}. Nothing is sent until you press send there.`
+    : 'This opens your email app with the report filled in. Nothing is sent until you press send there.';
+  $('reportSheet').hidden = false; $('reportKind').focus();
+}
+$('btnReportFind').onclick = openProblemReport;
+$('btnReportPlan').onclick = openProblemReport;
+$('reportCancel').onclick = () => { $('reportSheet').hidden = true; };
+$('reportSheet').onclick = e => { if (e.target === $('reportSheet')) $('reportSheet').hidden = true; };
+addEventListener('keydown', e => { if (e.key === 'Escape' && !$('reportSheet').hidden) $('reportSheet').hidden = true; });
+$('reportForm').onsubmit = e => {
+  e.preventDefault();
+  const kind = $('reportKind').value, more = $('reportText').value.trim();
+  const body = `${more || '(Describe what happened here.)'}\n\n---\n${reportDetails()}`.slice(0, 1800);
+  const a = document.createElement('a');
+  a.href = `mailto:${encodeURIComponent(CONFIG.contact || '')}?subject=${encodeURIComponent('Sunplot: ' + kind)}&body=${encodeURIComponent(body)}`;
+  document.body.appendChild(a); a.click(); a.remove();
+  $('reportSheet').hidden = true; $('reportText').value = '';
+};
+
 /* ---------- find ---------- */
 function renderSaved() {
   const ids = DB.order.filter(i => DB.projects[i]);
   $('savedWrap').hidden = !ids.length;
+  backupNote(ids.length);
   const box = $('saved'); box.textContent = '';
   for (const id of ids) {
     const p = DB.projects[id];
@@ -3414,7 +3555,7 @@ function applyOverlays() {
       // only fetch map pictures around this property: far fewer requests
       const bb = L.latLngBounds(P.boundary), c = bb.getCenter(), r = Math.max(0.015, (bb.getNorth() - bb.getSouth()) * 3);
       lay.options.bounds = bb.extend([[c.lat - r, c.lng - r * 1.3], [c.lat + r, c.lng + r * 1.3]]);
-      lay.on('tileloadstart', () => ovLoading(1)).on('tileload tileerror', () => ovLoading(-1)).on('remove', () => { ovPending = 0; ovLoading(0); });
+      lay.on('tileloadstart', () => ovLoading(1)).on('tileload', () => ovLoading(-1)).on('tileerror', () => { ovLoading(-1); logProblem(`Layer "${o.name || o.id}" picture failed`); }).on('remove', () => { ovPending = 0; ovLoading(0); });
       ovLayers.set(o.id, lay);
     }
     if (lay) { lay.setOpacity(g.opacity); if (on && !map.hasLayer(lay)) lay.addTo(map); if (!on && map.hasLayer(lay)) map.removeLayer(lay); }

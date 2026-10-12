@@ -23,12 +23,24 @@ Use these in Play Console → App content → Data safety. They match privacy.ht
 - Required or optional: **Optional**
 - Purpose: **App functionality**
 
+### App info and performance → Diagnostics
+(The "Report a problem" email: app version, phone model, recent loading errors.)
+- Collected: **Yes**. The report goes through the user's own email app, but you receive it, so declaring it is the safe answer.
+- Shared: **No**
+- Processed ephemerally: **No**
+- Required or optional: **Optional** (only when the user chooses to send a report)
+- Purpose: **App functionality** (fixing problems)
+
+### Personal info → Email address
+- Collected: **Yes**, only because a problem report arrives from the user's email address. Optional. Purpose: **Developer communications** and **App functionality**. Not shared.
+
 ### Everything else
-Name, email, phone, financial info, health, messages, photos, audio, files, calendar, contacts, app activity, web history, app info and performance, device IDs: **Not collected.**
-(The app stores plans on the device only; nothing is sent to the developer. No analytics, crash reporting, ads or accounts.)
+Name, phone, financial info, health, messages, photos, audio, files, calendar, contacts, app activity, web history, crash logs, device IDs: **Not collected.**
+(The app stores plans on the device only. Backup files are saved on the device and go only where the user puts them. Nothing is sent to the developer except a problem report the user chooses to email. No analytics, automatic crash reporting, ads or accounts.)
 
 ## Other App content forms
 - Privacy policy URL: https://shashlibaa-lab.github.io/Sunplot/privacy.html
+- Terms of use (for the store listing or description, optional): https://shashlibaa-lab.github.io/Sunplot/terms.html
 - Ads: **No ads**
 - App access: **All functionality is available without special access** (no login)
 - Target audience: **18 and over**
