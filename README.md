@@ -56,7 +56,7 @@ The app finds property lines in this order:
 2. **County map finder** everywhere else. The app looks up the county (US Census), searches ArcGIS Online, the public catalog most counties publish their parcel maps to, tries the best matches, and remembers the one that works for that county on that phone.
 3. **Tap the corners** where a county doesn't publish its parcels at all.
 
-Before launch, open **Check map sources** (bottom of the first screen) on a phone and on a computer. **Test all 50 states** looks up a real neighborhood in every state and DC the way the app does for a user, and **Copy results** puts the list on the clipboard. It tests every service from that device. Then zoom into a few properties in states without a statewide map and tap **Test the spot on the map**.
+Before launch, open **Check map sources** (bottom of the first screen) on a phone and on a computer. **Test all 50 states** looks up a city neighborhood and a rural county seat in every state, plus DC, the way the app does for a user, and **Copy results** puts the list on the clipboard. It tests every service from that device. Then zoom into a few properties in states without a statewide map and tap **Test the spot on the map**.
 
 Coverage limits:
 - Some counties only publish through paid viewers (Beacon, qPublic and similar). No free app can read those, so users there tap their corners.
@@ -76,6 +76,10 @@ A few county servers refuse requests that come straight from an app (they show a
 3. Paste that address into `CONFIG.relay` in `index.html` and upload the app again.
 
 The relay only forwards map and data services, and caches answers for a day. The free plan covers 100,000 requests a day.
+
+## When things fail
+
+Offline, slow and broken servers each get their own plain message: an offline notice at the top of the map, "couldn't reach the server" or "the map service is having issues" with a **Retry** button on search, parcel lookup, report cards and public-record sections, and a notice with **Retry** when a map layer keeps failing. When a county simply has no public parcel map, the app says so and offers **Tap my corners**.
 
 ## Layers while browsing
 

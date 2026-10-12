@@ -887,6 +887,15 @@ input[type=range]{width:100%;accent-color:var(--sun);height:28px}
 .rinfo summary{cursor:pointer;font-size:.85rem;color:var(--muted)}
 .rinfo pre{white-space:pre-wrap;word-break:break-word;font:.75rem/1.45 var(--f-mono);background:var(--paper-2);border-radius:8px;padding:10px;margin:8px 0 0;max-height:30vh;overflow:auto}
 #reportSheet .mcard{max-height:calc(100dvh - 32px);overflow:auto}
+/* messages with buttons */
+.status .acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.status .acts .btn{min-height:40px;padding:8px 14px}
+.status.warn{color:var(--ink)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 64px);z-index:660;width:min(92vw,420px);display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;background:var(--pine);color:#f3f0e2;border-radius:12px;padding:10px 40px 10px 14px;font:500 .88rem/1.35 var(--f-body);box-shadow:0 4px 18px rgba(0,0,0,.35)}
+.toast.err{background:#5a2422}
+.toast .tacts{display:flex;gap:8px}
+.toast .tacts button{background:var(--sun);color:#1f3326;border:0;border-radius:8px;font:700 .85rem var(--f-body);padding:7px 12px;min-height:36px;cursor:pointer}
+.toast .tx{position:absolute;right:6px;top:6px;width:30px;height:30px;border:0;background:none;color:#f3f0e2;font-size:1.2rem;cursor:pointer}
 /* layer loading pill */
 .maploading{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 64px);z-index:640;background:var(--pine);color:#f3f0e2;border-radius:999px;padding:7px 14px 7px 32px;font:600 .82rem var(--f-body);box-shadow:0 2px 10px rgba(0,0,0,.35);pointer-events:none}
 .maploading::before{content:"";position:absolute;left:12px;top:50%;width:12px;height:12px;margin-top:-6px;border-radius:50%;border:2px solid rgba(243,240,226,.35);border-top-color:var(--sun);animation:spin .8s linear infinite}
@@ -1079,6 +1088,8 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
   </form>
 </div>
 
+<div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toastText"></span><span class="tacts" id="toastActs"></span><button type="button" class="tx" id="toastClose" aria-label="Dismiss">×</button></div>
+
 <div class="maploading" id="mapLoading" hidden>Loading map layers…</div>
 
 <div class="banner" id="banner" hidden><span id="bannerText"></span><button id="bannerBtn">Done</button></div>
@@ -1157,7 +1168,7 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
       <h2>Statewide property lines</h2><div class="cklist" id="ckStates"></div>
       <p class="note">States not listed use the county map finder. Test a few spots there with "Test the spot on the map".</p>
       <h2>Every state</h2>
-      <p class="muted small">Looks up a real neighborhood in each state and the District of Columbia, the same way the app does for a user. Takes a few minutes.</p>
+      <p class="muted small">Looks up two real spots in each state, one in a city and one in a rural county, plus Washington, DC, the same way the app does for a user. Takes about five minutes.</p>
       <div class="row grow"><button class="btn primary" id="btnStatesRun" type="button">Test all 50 states</button><button class="btn" id="btnStatesCopy" type="button" disabled>Copy results</button></div>
       <p class="note" id="ckAllSummary"></p>
       <div class="cklist" id="ckAll"></div>
@@ -1167,6 +1178,7 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
     <div class="view" id="vParcel" hidden>
       <div class="head"><span class="eyebrow" id="pEyebrow">Property</span><h1 id="pTitle"></h1><p class="muted small" id="pSub"></p></div>
       <div class="facts" id="pFacts"></div>
+      <p class="status" id="pMsg" role="status" hidden></p>
       <p class="note" id="pSource"></p>
       <button class="btn primary" id="btnPlan">Plan this property</button>
       <div class="row grow">
@@ -1967,13 +1979,42 @@ function hostOf(url) {
 function logProblem(msg) { const t = new Date().toTimeString().slice(0, 5); if (PROBLEMS.length && PROBLEMS[PROBLEMS.length - 1].endsWith(msg)) return; PROBLEMS.push(`${t} ${msg}`); if (PROBLEMS.length > 8) PROBLEMS.shift(); }
 addEventListener('error', e => logProblem('Error: ' + (e.message || 'script')));
 addEventListener('unhandledrejection', e => logProblem('Error: ' + ((e.reason && e.reason.message) || e.reason || 'promise')));
+/* What kind of trouble the network had, so messages can say "offline" vs "server busy" vs "nothing here". */
+const NET = { offline: 0, timeout: 0, server: 0, blocked: 0 };
+const netSnap = () => ({ ...NET });
+function netTrouble(before) {
+  if (navigator.onLine === false || NET.offline > before.offline) return 'offline';
+  if (NET.server > before.server) return 'server';
+  if (NET.timeout > before.timeout) return 'timeout';
+  return null;
+}
+const MSG = {
+  offline: "You're offline. Your saved places and plans still work; maps and lookups need a connection.",
+  timeout: "We couldn't reach the server. Check your connection and try again.",
+  server: 'The map service is having issues. Please try again in a few minutes.',
+  noparcel: "We couldn't find parcel data for this area. Tap your corners to draw it manually. Everything else works the same.",
+  nosearch: 'No match. Add the city and state, or zoom in and tap your land on the map.'
+};
+/** Put a message, and optional buttons, in a status line. actions: [[label, fn, primary?], …] */
+function say(el, text, cls, actions = []) {
+  el.className = 'status' + (cls ? ' ' + cls : ''); el.textContent = text || ''; el.hidden = !text;
+  if (actions.length) {
+    const row = document.createElement('span'); row.className = 'acts';
+    for (const [label, fn, primary] of actions) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn' + (primary ? ' primary' : ''); b.textContent = label; b.onclick = fn; row.appendChild(b); }
+    el.appendChild(row);
+  }
+}
 async function rawJSON(url, opts = {}, ms = 15000) {
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms);
   try {
     let r;
     try { r = await fetch(url, { ...opts, signal: ctl.signal }); }
-    catch (e) { logProblem((e.name === 'AbortError' ? 'Timed out ' : 'Blocked ') + hostOf(url)); if (e.name === 'AbortError') throw e; const n = new Error('Network or cross-site block'); n.net = true; throw n; }
-    if (!r.ok) { logProblem(`HTTP ${r.status} ${hostOf(url)}`); throw new Error('HTTP ' + r.status); }
+    catch (e) {
+      if (e.name === 'AbortError') NET.timeout++; else if (navigator.onLine === false) NET.offline++; else NET.blocked++;
+      logProblem((e.name === 'AbortError' ? 'Timed out ' : navigator.onLine === false ? 'Offline ' : 'Blocked ') + hostOf(url));
+      if (e.name === 'AbortError') throw e; const n = new Error('Network or cross-site block'); n.net = true; throw n;
+    }
+    if (!r.ok) { if (r.status >= 500 || r.status === 429) NET.server++; logProblem(`HTTP ${r.status} ${hostOf(url)}`); throw new Error('HTTP ' + r.status); }
     const j = await r.json();
     if (j && j.error) throw new Error(j.error.message || 'Service error');
     return j;
@@ -2179,7 +2220,7 @@ async function geocodeBackup(text) {
     return (j.results || []).map(r => ({ lat: r.lat, lng: r.lon, title: r.address_line1 || r.formatted, sub: r.address_line2 || '' }));
   }
   const q = new URLSearchParams({ q: text, format: 'jsonv2', countrycodes: 'us', limit: '5' });
-  const j = await getJSON(`${SVC.nominatim}?${q}`, { headers: { 'Accept-Language': 'en' } });
+  const j = await rawJSON(`${SVC.nominatim}?${q}`, { headers: { 'Accept-Language': 'en' } }, 7000);  // backup: fail fast
   return j.map(g => { const p = g.display_name.split(', '); return { lat: +g.lat, lng: +g.lon, title: p.slice(0, 2).join(', '), sub: p.slice(2, 5).join(', ') }; });
 }
 /** USGS 3DEP elevation on an n×n grid over the property, in feet. Works anywhere in the US. */
@@ -2431,17 +2472,35 @@ const STATE_TESTS = [
   ['UT', 'Salt Lake City', 40.7230, -111.8600], ['VT', 'Burlington', 44.4830, -73.2050], ['VA', 'Richmond', 37.5530, -77.4710], ['WA', 'Olympia', 47.0350, -122.8950],
   ['WV', 'Charleston', 38.3400, -81.6500], ['WI', 'Madison', 43.0670, -89.4250], ['WY', 'Cheyenne', 41.1420, -104.8100]
 ];
+/* A rural county seat in each state: farm country is where most users are. */
+const RURAL_TESTS = [
+  ['AL', 'Greensboro', 32.704, -87.596], ['AK', 'Palmer', 61.599, -149.113], ['AZ', 'Safford', 32.834, -109.708], ['AR', 'Clarksville', 35.471, -93.466],
+  ['CA', 'Yreka', 41.735, -122.634], ['CO', 'Sterling', 40.626, -103.208], ['CT', 'Litchfield', 41.747, -73.189], ['DE', 'Georgetown', 38.690, -75.385],
+  ['FL', 'Live Oak', 30.295, -82.984], ['GA', 'Lyons', 32.204, -82.322], ['HI', 'Waimea', 20.023, -155.671], ['ID', 'Salmon', 45.176, -113.896],
+  ['IL', 'Paris', 39.611, -87.696], ['IN', 'Rockville', 39.762, -87.229], ['IA', 'Decorah', 43.303, -91.786], ['KS', 'Hays', 38.879, -99.327],
+  ['KY', 'Bardstown', 37.809, -85.467], ['LA', 'Ville Platte', 30.688, -92.271], ['ME', 'Farmington', 44.671, -70.151], ['MD', 'Easton', 38.774, -76.076],
+  ['MA', 'Greenfield', 42.588, -72.600], ['MI', 'Hastings', 42.646, -85.291], ['MN', 'Willmar', 45.122, -95.043], ['MS', 'Oxford', 34.366, -89.519],
+  ['MO', 'Sedalia', 38.704, -93.228], ['MT', 'Lewistown', 47.062, -109.428], ['NE', 'Kearney', 40.699, -99.081], ['NV', 'Elko', 40.832, -115.763],
+  ['NH', 'Lancaster', 44.489, -71.569], ['NJ', 'Flemington', 40.512, -74.859], ['NM', 'Las Vegas', 35.594, -105.224], ['NY', 'Cooperstown', 42.700, -74.924],
+  ['NC', 'Yadkinville', 36.134, -80.659], ['ND', 'Devils Lake', 48.113, -98.865], ['OH', 'Millersburg', 40.554, -81.918], ['OK', 'Guymon', 36.683, -101.481],
+  ['OR', 'Pendleton', 45.672, -118.789], ['PA', 'Wellsboro', 41.749, -77.300], ['RI', 'Exeter', 41.577, -71.538], ['SC', 'Orangeburg', 33.492, -80.856],
+  ['SD', 'Pierre', 44.368, -100.351], ['TN', 'Lewisburg', 35.449, -86.789], ['TX', 'Fredericksburg', 30.275, -98.872], ['UT', 'Richfield', 38.773, -112.084],
+  ['VT', 'Middlebury', 44.015, -73.169], ['VA', 'Farmville', 37.302, -78.392], ['WA', 'Ellensburg', 46.996, -120.548], ['WV', 'Lewisburg', 37.802, -80.446],
+  ['WI', 'Viroqua', 43.557, -90.889], ['WY', 'Sheridan', 44.797, -106.956]
+];
 let statesRunning = false, statesReport = [];
 async function runStateTests() {
   if (statesRunning) return; statesRunning = true;
   const box = $('ckAll'); box.textContent = ''; statesReport = [];
   $('btnStatesRun').disabled = true; $('btnStatesCopy').disabled = true;
   let done = 0; const counts = { ok: 0, warn: 0, bad: 0 };
-  const sum = () => { $('ckAllSummary').textContent = `${done} of ${STATE_TESTS.length} done · ${counts.ok} found property lines · ${counts.warn} no public map at that spot · ${counts.bad} failed`; };
+  const all = [...STATE_TESTS.map(t => [...t, 'city']), ...RURAL_TESTS.map(t => [...t, 'rural'])]
+    .sort((a, b) => (STATE_NAMES[a[0]] || a[0]).localeCompare(STATE_NAMES[b[0]] || b[0]) || (a[4] === 'city' ? -1 : 1));
+  const sum = () => { $('ckAllSummary').textContent = `${done} of ${all.length} spots done · ${counts.ok} found property lines · ${counts.warn} no public map at that spot · ${counts.bad} failed`; };
   sum();
   probeDeg = 0.0008;
-  const tasks = STATE_TESTS.map(([st, city, lat, lng]) => async () => {
-    const set = ckRow(box, `${STATE_NAMES[st] || st} · ${city}`);
+  const tasks = all.map(([st, city, lat, lng, kind]) => async () => {
+    const set = ckRow(box, `${STATE_NAMES[st] || st} · ${city} (${kind})`);
     let status, text;
     try {
       const [hit, ms] = await timed(() => Promise.race([parcelAt(lat, lng), sleep(60000).then(() => { const e = new Error('Took over a minute'); e.name = 'AbortError'; throw e; })]));
@@ -2450,9 +2509,9 @@ async function runStateTests() {
       else { status = 'warn'; text = `No public parcel map found at this spot · ${(ms / 1000).toFixed(1)} s`; }
     } catch (e) { status = 'bad'; text = why(e); }
     set(status, text); counts[status]++; done++; sum();
-    statesReport.push(`${status === 'ok' ? 'OK  ' : status === 'warn' ? 'NONE' : 'FAIL'} ${st} ${city}: ${text}`);
+    statesReport.push(`${status === 'ok' ? 'OK  ' : status === 'warn' ? 'NONE' : 'FAIL'} ${st} ${kind === 'city' ? 'city ' : 'rural'} ${city}: ${text}`);
   });
-  try { await pool(tasks, 4); } finally { probeDeg = 0; }
+  try { await pool(tasks, 6); } finally { probeDeg = 0; }
   statesReport.sort((a, b) => a.slice(5).localeCompare(b.slice(5)));
   $('btnStatesRun').disabled = false; $('btnStatesCopy').disabled = false; statesRunning = false;
 }
@@ -2561,7 +2620,7 @@ $('bannerBtn').onclick = () => {
 $('coverage').textContent = `Property lines load from statewide maps in ${STATE_SOURCES.length - 1} states and DC, and from county maps found automatically everywhere else. Where no county map is public, you tap the corners of your land.`;
 
 /* ---------- backup and restore ---------- */
-const APP_VERSION = 'sunplot-v20', BACKUP_KEY = 'sunplot.lastBackup';
+const APP_VERSION = 'sunplot-v21', BACKUP_KEY = 'sunplot.lastBackup';
 function backupNote(n) {
   let last = 0; try { last = +localStorage.getItem(BACKUP_KEY) || 0; } catch {}
   $('btnBackup').hidden = !n;
@@ -2842,10 +2901,13 @@ let searchSeq = 0;
 async function runSearch(text, magicKey) {
   const seq = ++searchSeq;
   hideSuggest();
-  const st = $('findStatus'); st.className = 'status'; st.textContent = 'Searching…';
+  const st = $('findStatus'); say(st, 'Searching…');
   const box = $('results'); box.textContent = '';
-  let gs = [];
+  let gs = []; const before = netSnap();
+  const slow = setTimeout(() => { if (seq === searchSeq) say(st, 'Still searching… the address service is slow right now.'); }, 6000);
   try { gs = await geocode(text, magicKey); } catch {}
+  clearTimeout(slow);
+  const noMatch = () => { const t = netTrouble(before); if (t) say(st, MSG[t], 'err', [['Retry', () => runSearch(text, magicKey), true]]); else say(st, MSG.nosearch, 'err'); };
   if (seq !== searchSeq) return;
   // one clear match: go straight there
   if (gs.length && gs[0].exact && gs[0].score >= 95 && (gs.length === 1 || gs[1].score < gs[0].score - 3)) { st.textContent = ''; return pickPoint(gs[0].lat, gs[0].lng, true); }
@@ -2855,13 +2917,13 @@ async function runSearch(text, magicKey) {
   const named = statesIn(`${text}, ${gs.map(g => g.sub).join(', ')}`);
   const addrStates = named.filter(x => STATE_SOURCES.some(s => s.st === x && s.addr));
   if (!addrStates.length || (gs.length && gs[0].exact && gs[0].score >= 90)) {
-    if (!gs.length) { st.className = 'status err'; st.textContent = 'No match. Add the city and state, or zoom in and tap your land on the map.'; }
+    if (!gs.length) noMatch();
     return;
   }
   const hits = await searchParcels(text, addrStates).catch(() => []);
   if (seq !== searchSeq) return;
   for (const h of hits) { const c = toCandidate(h); box.insertBefore(listButton(c.title, `${c.sub} · ${fmtAcres(c.acres)}`, () => pickCandidate(c, true)), box.firstChild); }
-  if (!gs.length && !hits.length) { st.className = 'status err'; st.textContent = 'No match. Add the city and state, or zoom in and tap your land on the map.'; return; }
+  if (!gs.length && !hits.length) { noMatch(); return; }
   st.textContent = box.children.length === 1 ? '' : 'Pick the right one:';
   if (box.children.length === 1) box.firstChild.click();
 }
@@ -2904,13 +2966,17 @@ function locateMe() {
   );
 }
 async function pickPoint(lat, lng, fly) {
-  const st = $('findStatus'); st.className = 'status'; st.textContent = 'Looking up property lines…';
+  const st = $('findStatus'); say(st, 'Looking up property lines…');
   if (fly) map.setView([lat, lng], 18);
+  const before = netSnap();
+  const slow = setTimeout(() => { if (st.textContent === 'Looking up property lines…') st.textContent = 'Still looking… the county map server is slow right now.'; }, 8000);
   const hit = await parcelAt(lat, lng, step => { st.textContent = step; }).catch(() => null);
-  st.textContent = '';
+  clearTimeout(slow); say(st, '');
   if (hit) return pickCandidate(toCandidate(hit), true);
   const place = await placeAt(lat, lng).catch(() => null);
-  candidate = { lat, lng, ring: null, title: 'This spot', sub: place ? `${place.countyFull}, ${place.st}` : `${lat.toFixed(5)}, ${lng.toFixed(5)}` };
+  // nothing found: a real gap, or a server that didn't answer?
+  const trouble = netTrouble(before) || (!place ? 'timeout' : null);
+  candidate = { lat, lng, ring: null, title: 'This spot', sub: place ? `${place.countyFull}, ${place.st}` : `${lat.toFixed(5)}, ${lng.toFixed(5)}`, trouble };
   showCandidate();
 }
 function pickCandidate(c, fit) {
@@ -2924,7 +2990,11 @@ function showCandidate() {
   else L.circleMarker([c.lat, c.lng], { radius: 9, color: '#ff3b30', weight: 3, fillOpacity: 0.2, interactive: false }).addTo(lyBoundary);
   $('pEyebrow').textContent = !c.ring ? 'No public property lines here' : c.src && c.src.kind === 'county' ? 'Found on a county map' : 'Property found';
   $('pTitle').textContent = c.title;
-  $('pSub').textContent = c.ring ? c.sub : `${c.sub}. This county doesn't publish its property lines, so tap the corners of your land instead. Everything else works the same.`;
+  $('pSub').textContent = c.ring ? c.sub : `${c.sub}.`;
+  if (c.ring) say($('pMsg'), '');
+  else if (c.trouble) say($('pMsg'), MSG[c.trouble], 'err', [['Retry', () => pickPoint(c.lat, c.lng, false), true]]);
+  else say($('pMsg'), MSG.noparcel, 'warn');   // the "Tap my corners" button sits right below
+  if (!c.ring && c.trouble) $('pEyebrow').textContent = "Couldn't check property lines";
   renderParcelData($('pData'), c.ring ? candidateCtx(c) : { obj: {}, lat: c.lat, lng: c.lng, ring: null });
   $('pSource').textContent = c.ring ? `Source: ${c.src.label}.${c.src.kind === 'county' ? ' Found automatically, so check that the red outline matches your land.' : ''}` : '';
   const facts = $('pFacts'); facts.textContent = '';
@@ -3419,7 +3489,7 @@ function loadInto(id, cached, fetcher, render) {
   if (cached()) { render(body); return; }
   body.innerHTML = '<p class="muted small">Loading…</p>';
   fetcher().then(() => { if (p === P && mode === 'report') render(body); })
-    .catch(() => { if (p === P) { body.innerHTML = '<p class="status err"></p>'; body.firstChild.textContent = SOURCE_FAIL[id] || 'Couldn\'t reach this service. Try again later.'; } });
+    .catch(() => { if (p === P) { body.textContent = ''; const m = document.createElement('p'); body.appendChild(m); say(m, (navigator.onLine === false ? MSG.offline + ' ' : '') + (SOURCE_FAIL[id] || "Couldn't reach this service."), 'err', [['Retry', () => loadInto(id, cached, fetcher, render), true]]); } });
 }
 const SOURCE_FAIL = {
   cardSoil: 'The USDA soil service didn\'t answer. Try again later, or look the land up at websoilsurvey.nrcs.usda.gov.',
@@ -3962,15 +4032,15 @@ const KY_PAST = [['2022', '2022_2FT'], ['2020', '2020_2FT'], ['2018', '2018_2FT'
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const NC_PAST = [['2020_2023', 'Orthoimagery_2020_2023', '2020–23'], ['2016_2019', 'Orthoimagery_2016_2019', '2016–19'], ['2012_2015', 'Orthoimagery_2012_2015', '2012–15'], ['2010', 'Orthoimagery_2010', '2010'], ['2008', 'Orthoimagery_2008', '2008'], ['2006', 'Orthoimagery_2006', '2006'], ['2004', 'Orthoimagery_2004', '2004'], ['2002', 'Orthoimagery_2002', '2002'], ['2000', 'Orthoimagery_2000', '2000'], ['1998', 'Orthoimagery_1998', '1998'], ['1995', 'Orthoimagery_1995', '1995'], ['1993', 'DOQQ_NC_1993', '1993']];
 const OVERLAYS = [
-  { id: 'flood', make: () => new ExportTiles(mapExport(GIS.fema, 28), { pane: 'gis', maxZoom: 22, attribution: 'FEMA NFHL' }) },
-  { id: 'wetland', make: () => new ExportTiles(mapExport(GIS.nwi, 0), { pane: 'gis', maxZoom: 22, minZoom: 11, attribution: 'USFWS National Wetlands Inventory' }) },
-  { id: 'water', make: () => new ExportTiles(mapExport(GIS.nhd), { pane: 'gis', maxZoom: 22, attribution: 'USGS NHD' }) },
-  { id: 'soil', make: () => L.tileLayer(GIS.soilTiles, { pane: 'gis', maxZoom: 22, maxNativeZoom: 15, minZoom: 12, attribution: 'USDA gSSURGO via Purdue' }) },
-  { id: 'landcover', make: () => new ExportTiles(mapExport(GIS.nlcd, 2), { pane: 'gis', maxZoom: 22, attribution: 'NLCD 2021 via USDA' }) },
-  { id: 'ndvi', make: () => new ExportTiles(imgExport(GIS.naipPlus, 'NDVI_Color'), { pane: 'gis', maxZoom: 22, maxNativeZoom: 19, attribution: 'USDA NAIP via USGS' }) },
-  { id: 'contours', make: () => new ExportTiles(mapExport(GIS.contours), { pane: 'gis', maxZoom: 22, minZoom: 13, attribution: 'USGS contours' }) },
-  { id: 'slope', make: () => new ExportTiles(imgExport(GIS.dem, 'Slope Map'), { pane: 'gis', maxZoom: 22, maxNativeZoom: 18, attribution: 'USGS 3DEP' }) },
-  { id: 'aspect', make: () => new ExportTiles(imgExport(GIS.dem, 'Aspect Map'), { pane: 'gis', maxZoom: 22, maxNativeZoom: 18, attribution: 'USGS 3DEP' }) }
+  { id: 'flood', name: 'Flood zones', who: 'The FEMA flood map server', make: () => new ExportTiles(mapExport(GIS.fema, 28), { pane: 'gis', maxZoom: 22, attribution: 'FEMA NFHL' }) },
+  { id: 'wetland', name: 'Wetlands', who: 'The wetlands server', make: () => new ExportTiles(mapExport(GIS.nwi, 0), { pane: 'gis', maxZoom: 22, minZoom: 11, attribution: 'USFWS National Wetlands Inventory' }) },
+  { id: 'water', name: 'Streams and ponds', who: 'The USGS water server', make: () => new ExportTiles(mapExport(GIS.nhd), { pane: 'gis', maxZoom: 22, attribution: 'USGS NHD' }) },
+  { id: 'soil', name: 'Soil types', who: 'The soil map server', make: () => L.tileLayer(GIS.soilTiles, { pane: 'gis', maxZoom: 22, maxNativeZoom: 15, minZoom: 12, attribution: 'USDA gSSURGO via Purdue' }) },
+  { id: 'landcover', name: 'Land cover', who: 'The land cover server', make: () => new ExportTiles(mapExport(GIS.nlcd, 2), { pane: 'gis', maxZoom: 22, attribution: 'NLCD 2021 via USDA' }) },
+  { id: 'ndvi', name: 'Plant health', who: 'The USDA photo server', make: () => new ExportTiles(imgExport(GIS.naipPlus, 'NDVI_Color'), { pane: 'gis', maxZoom: 22, maxNativeZoom: 19, attribution: 'USDA NAIP via USGS' }) },
+  { id: 'contours', name: 'Contour lines', who: 'The USGS contour server', make: () => new ExportTiles(mapExport(GIS.contours), { pane: 'gis', maxZoom: 22, minZoom: 13, attribution: 'USGS contours' }) },
+  { id: 'slope', name: 'Slope', who: 'The USGS elevation server', make: () => new ExportTiles(imgExport(GIS.dem, 'Slope Map'), { pane: 'gis', maxZoom: 22, maxNativeZoom: 18, attribution: 'USGS 3DEP' }) },
+  { id: 'aspect', name: 'Slope direction', who: 'The USGS elevation server', make: () => new ExportTiles(imgExport(GIS.dem, 'Aspect Map'), { pane: 'gis', maxZoom: 22, maxNativeZoom: 18, attribution: 'USGS 3DEP' }) }
 ];
 const ovLayers = new Map();
 let baseExtra = null;
@@ -4072,8 +4142,8 @@ function applyBase() {
   if (want !== baseKey || (want !== 'aerial' && !baseExtra)) {   // only swap pictures when the choice changed
     if (baseExtra) { map.removeLayer(baseExtra); baseExtra = null; }
     for (const l of [baseTiles, ncTiles]) { if (aerialOn && !map.hasLayer(l)) l.addTo(map); if (!aerialOn && map.hasLayer(l)) map.removeLayer(l); }
-    if (past) baseExtra = past.make().addTo(map);
-    else if (!aerialOn) { const b = BASEMAPS.find(x => x.id === g.base); if (b && b.make) baseExtra = b.make().addTo(map); }
+    if (past) baseExtra = watchLayer(past.make(), 'This past photo', 'Its photo server').addTo(map);
+    else if (!aerialOn) { const b = BASEMAPS.find(x => x.id === g.base); if (b && b.make) baseExtra = watchLayer(b.make(), `The ${b.name.toLowerCase()} map`, 'Its map server').addTo(map); }
     if (baseExtra) baseExtra.bringToBack();
     baseKey = want;
   }
@@ -4094,6 +4164,32 @@ function applyBase() {
     : 'No past photos found here. Showing today\'s aerial.';
   if (loading) loadPastPhotos(sp).then(() => { if (gisSpot() === sp && gisState().base === 'past') applyBase(); });
 }
+/* ----- toast: short notices on top of the map ----- */
+let toastTimer = 0, toastKey = null;
+function toast(text, { key = null, err = false, sticky = false, actions = [] } = {}) {
+  clearTimeout(toastTimer); toastKey = key;
+  $('toastText').textContent = text; $('toast').classList.toggle('err', err);
+  const a = $('toastActs'); a.textContent = '';
+  for (const [label, fn] of actions) { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.onclick = () => { hideToast(); fn(); }; a.appendChild(b); }
+  $('toast').hidden = false;
+  if (!sticky) toastTimer = setTimeout(hideToast, actions.length ? 12000 : 4000);
+}
+function hideToast(key) { if (key && toastKey !== key) return; clearTimeout(toastTimer); $('toast').hidden = true; toastKey = null; }
+$('toastClose').onclick = () => hideToast();
+addEventListener('offline', () => toast(MSG.offline, { key: 'offline', err: true, sticky: true }));
+addEventListener('online', () => { hideToast('offline'); toast('Back online.', { key: 'online' }); });
+if (navigator.onLine === false) toast(MSG.offline, { key: 'offline', err: true, sticky: true });
+/** Tell the user when a map layer keeps failing, once per layer, with Retry. */
+function watchLayer(lay, name, who) {
+  let ok = 0, bad = 0, told = false;
+  lay.on('tileload', () => { ok++; }).on('tileerror', () => {
+    bad++;
+    if (told || navigator.onLine === false || bad < 4 || bad < ok) return;
+    told = true;
+    toast(`${name} isn't loading right now. ${who} may be busy.`, { key: 'layer', err: true, actions: [['Retry', () => { ok = bad = 0; told = false; lay.redraw(); }]] });
+  });
+  return lay;
+}
 let ovFor = null, ovPending = 0;
 function ovLoading(d) { ovPending = Math.max(0, ovPending + d); $('mapLoading').hidden = ovPending === 0; }
 function applyOverlays() {
@@ -4105,7 +4201,7 @@ function applyOverlays() {
     if (cb) cb.checked = on;
     let lay = ovLayers.get(o.id);
     if (on && !lay) {
-      lay = o.make();
+      lay = watchLayer(o.make(), `The ${o.name.toLowerCase()} layer`, o.who);
       if (P) {
         // only fetch map pictures around this property: far fewer requests
         const bb = L.latLngBounds(P.boundary), c = bb.getCenter(), r = Math.max(0.015, (bb.getNorth() - bb.getSouth()) * 3);
@@ -4523,7 +4619,8 @@ function renderParcelData(box, ctx) {
     d.addEventListener('toggle', () => {
       if (!d.open || state) return;
       state = 1;
-      PD_LOAD[id](ctx, body, count).then(() => { state = 2; }).catch(() => { state = 0; body.innerHTML = '<p class="status err">Couldn\'t load this right now. Close and reopen to try again.</p>'; });
+      const go = () => { body.textContent = ''; PD_LOAD[id](ctx, body, count).then(() => { state = 2; }).catch(() => { state = 0; body.textContent = ''; const m = document.createElement('p'); body.appendChild(m); say(m, navigator.onLine === false ? MSG.offline : "Couldn't load this right now.", 'err', [['Retry', () => { state = 1; go(); }, true]]); }); };
+      go();
     });
     box.appendChild(d);
   }
