@@ -35,7 +35,7 @@ Open the web address. On iPhone: Share → Add to Home Screen. On Android: menu 
 
 The app finds property lines in this order:
 
-1. **Statewide parcel maps** in 20 states and DC: North Carolina, Virginia, Wisconsin, Indiana, Delaware, New York, Florida, Washington, Texas, Arkansas, West Virginia, Montana, Maryland (through the relay), New Jersey, Connecticut, Vermont, New Hampshire, Hawaii, Colorado, Utah (county by county) and DC.
+1. **Statewide parcel maps** in 20 states and DC: North Carolina, Virginia, Wisconsin, Indiana, Delaware, New York, Florida, Washington, Texas (point lookup only), Arkansas, West Virginia, Montana, Maryland (through the relay), New Jersey, Connecticut, Vermont, New Hampshire, Hawaii, Colorado, Utah (county by county) and DC.
 2. **County map finder** everywhere else. The app looks up the county (US Census), searches ArcGIS Online, the public catalog most counties publish their parcel maps to, tries the best matches, and remembers the one that works for that county on that phone.
 3. **Tap the corners** where a county doesn't publish its parcels at all.
 

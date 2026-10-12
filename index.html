@@ -1596,7 +1596,7 @@ const STATE_SOURCES = [
   { st: 'NY', url: 'https://gisservices.its.ny.gov/arcgis/rest/services/NYS_Tax_Parcels_Public/FeatureServer/1', addr: 'PARCEL_ADDR', test: [42.6525, -73.7573] },
   { st: 'FL', url: 'https://gis.fdacs.gov/mapping/rest/services/GIO_Parcels_for_OAWP_Optimized/MapServer/0', test: [30.4381, -84.2816] },
   { st: 'WA', url: 'https://wisaard.dahp.wa.gov/server/rest/services/County_Parcels/MapServer/0', addr: 'SITUS_ADDRESS', test: [47.0358, -122.9048] },
-  { st: 'TX', url: 'https://services1.arcgis.com/1mtXwieMId59thmg/ArcGIS/rest/services/2019_Texas_Parcels_StratMap/FeatureServer/0', addr: 'situs_addr', test: [30.2747, -97.7404] }, // copy of TxGIO StratMap; the state's own service doesn't allow queries
+  { st: 'TX', kind: 'identify', url: 'https://feature.geographic.texas.gov/arcgis/rest/services/Parcels/stratmap_land_parcels_48_most_recent/MapServer', layerId: 0, test: [30.2747, -97.7404] }, // TxGIO StratMap: allows "identify" at a point but not searches
   { st: 'AR', url: 'https://geostor.arkansas.gov/ArcGIS/rest/services/FEATURESERVICES/Planning_Cadastre/FeatureServer/6', test: [34.7466, -92.2890] },
   { st: 'WV', url: 'https://services.wvgis.wvu.edu/arcgis/rest/services/Planning_Cadastre/WV_Parcels/MapServer/0', test: [38.3365, -81.6123] },
   { st: 'MT', url: 'https://gisservice.mt.gov/ArcGIS/rest/services/msdi_cadastral_map_v1/MapServer/1', addr: 'AddressLine1', test: [46.5857, -112.0184] },
@@ -1738,6 +1738,14 @@ async function pointQuery(layer, lat, lng, ms) {
   return fs.find(f => { const r = biggestRing(f.geometry); if (!r) return false; const fr = makeFrame(lat, lng), ac = polyArea(r.map(([a, b]) => fr.toXY(a, b))) / 43560; return ac > 0.002 && ac < 200000; }) || null;
 }
 
+/** For services that answer "what's at this point" but refuse searches (Texas). */
+async function identifyAt(base, layerId, lat, lng, ms = 15000) {
+  const d = 0.001, q = new URLSearchParams({ geometry: `${lng},${lat}`, geometryType: 'esriGeometryPoint', sr: '4326', layers: `all:${layerId}`, tolerance: '0', mapExtent: [lng - d, lat - d, lng + d, lat + d].join(','), imageDisplay: '400,400,96', returnGeometry: 'true', f: 'json' });
+  const j = await getJSON(`${base}/identify?${q}`, {}, ms);
+  return (j.results || []).map(r => esriToGeo({ attributes: r.attributes, geometry: r.geometry })).filter(f => biggestRing(f.geometry));
+}
+const identifyBases = () => STATE_SOURCES.filter(s => s.kind === 'identify').map(s => s.url);
+
 /** For a "service" source, find its parcel layer. */
 const layerCache = new Map();
 function resolveLayer(url) {
@@ -1756,6 +1764,7 @@ function resolveLayer(url) {
 }
 function sourceLayer(s, place) {
   if (s.kind === 'county') { const c = (place && place.county) || s.testCounty; return c ? Promise.resolve(s.url.replace('{County}', c.replace(/[^A-Za-z]/g, ''))) : Promise.resolve(null); }
+  if (s.kind === 'identify') return Promise.resolve(`${s.url}/${s.layerId}`);
   return s.kind === 'service' ? resolveLayer(s.url) : Promise.resolve(s.url);
 }
 
@@ -1780,7 +1789,7 @@ async function parcelAt(lat, lng, onStep) {
   for (const s of states) {
     try {
       const layer = await sourceLayer(s, place); if (!layer) continue;
-      const f = await pointQuery(layer, lat, lng);
+      const f = s.kind === 'identify' ? (await identifyAt(s.url, s.layerId, lat, lng))[0] || null : await pointQuery(layer, lat, lng);
       if (f) { lastLayer = layer; return { src: { kind: 'state', st: s.st, label: `${STATE_NAMES[s.st]} statewide parcels`, county: place && place.countyFull }, f, layer }; }
     } catch { /* fall through to the county finder */ }
   }
@@ -1918,7 +1927,7 @@ function neighborLayerUrl() {
 map.on('moveend', () => { clearTimeout(nbTimer); nbTimer = setTimeout(drawNeighbors, 350); });
 async function drawNeighbors() {
   const url = neighborLayerUrl(), seq = ++nbSeq;
-  if (!url || map.getZoom() < 17 || /NC1Map_Parcels/.test(url)) { lyNeighbors.clearLayers(); return; }
+  if (!url || map.getZoom() < 17 || /NC1Map_Parcels/.test(url) || identifyBases().some(b => url.startsWith(b))) { lyNeighbors.clearLayers(); return; }
   const b = map.getBounds();
   try {
     const fs = await arcQuery(url, { geometry: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => v.toFixed(6)).join(','), geometryType: 'esriGeometryEnvelope', inSR: '4326', spatialRel: 'esriSpatialRelIntersects', outFields: '', maxAllowableOffset: '0.000004' }, 12000);
@@ -1978,11 +1987,12 @@ async function runChecks() {
     const set = ckRow(st, `${STATE_NAMES[s.st]}`);
     try {
       const [n, ms] = await timed(async () => {
+        if (s.kind === 'identify') return (await identifyAt(s.url, s.layerId, s.test[0], s.test[1], 20000)).length;
         const layer = await sourceLayer(s, null), d = 0.0012;
         const fs = await arcQuery(layer, { geometry: [s.test[1] - d, s.test[0] - d, s.test[1] + d, s.test[0] + d].join(','), geometryType: 'esriGeometryEnvelope', inSR: '4326', spatialRel: 'esriSpatialRelIntersects', outFields: '', returnGeometry: 'false' }, 20000);
         return fs.length;
       });
-      set(n ? 'ok' : 'warn', n ? `${n} parcels near the capitol · ${ms} ms` : `Answers, but no parcels near the capitol · ${ms} ms`);
+      set(n ? 'ok' : 'warn', n ? `${n} parcel${n === 1 ? '' : 's'} ${s.kind === 'identify' ? 'at' : 'near'} the capitol · ${ms} ms` : `Answers, but no parcels near the capitol · ${ms} ms`);
     } catch (e) { set(s.note && !CONFIG.relay ? 'warn' : 'bad', s.note && !CONFIG.relay ? s.note : why(e)); }
   });
   const relayedBefore = netStats.relayed;
@@ -2058,7 +2068,7 @@ function toCandidate(hit) {
   const attrCounty = get('county') != null && isNaN(+get('county')) ? countyName(String(get('county'))) : '';
   const county = src.county || attrCounty;
   const id = get('id') ?? a.OBJECTID ?? a.objectid ?? a.FID ?? c.map(v => v.toFixed(5)).join(',');
-  const addr = get('addr') != null && /[a-z]/i.test(String(get('addr'))) ? titleCase(String(get('addr'))) : '';
+  const addr = get('addr') != null && /[a-z]/i.test(String(get('addr'))) ? titleCase(String(get('addr')).split(',')[0].trim()) : '';
   return {
     src, layer: hit.layer, ring, lat: c[0], lng: c[1], parno: String(id).trim(), acres, county, facts: factsOf(hit),
     title: addr || 'Parcel ' + String(id).trim(),
