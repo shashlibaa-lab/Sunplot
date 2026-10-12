@@ -713,6 +713,8 @@ body{background:var(--pine);color:var(--ink);font:15px/1.45 var(--f-body);overfl
 .attrbox{position:fixed;right:0;bottom:0;z-index:500;pointer-events:none}
 .attrbox .leaflet-control-attribution{pointer-events:auto;margin:0;background:rgba(255,255,255,.75);color:#333;font:10px/1.5 var(--f-body);padding:0 6px;border-radius:6px 0 0 0}
 .attrbox .leaflet-control-attribution a{color:#2a6b8a}
+.pastrow{display:grid;grid-template-columns:44px 1fr 44px;gap:6px;align-items:center}
+.pastrow .btn{min-height:46px;padding:0}
 .fab.north svg{width:26px;height:26px;transition:transform .05s linear}
 
 /* top bar */
@@ -1195,7 +1197,9 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
         <div class="lhead"><h2>Base map</h2></div>
         <div class="seg" id="baseSeg" role="group" aria-label="Base map"></div>
         <p class="note" id="baseTip"></p>
-        <div class="field" id="pastWrap" hidden><label for="pastSel">Year</label><select id="pastSel"></select><p class="note" id="pastNote"></p></div>
+        <div class="field" id="pastWrap" hidden><label for="pastSel">Photo date</label>
+          <div class="pastrow"><button type="button" class="btn" id="pastOlder" aria-label="Older photo">◀</button><select id="pastSel"></select><button type="button" class="btn" id="pastNewer" aria-label="Newer photo">▶</button></div>
+          <p class="note" id="pastNote"></p></div>
         <div class="lhead"><h2>Overlays</h2><span class="muted small" id="layerCount"></span><button class="btn ghost" id="ovClear" type="button">Clear</button></div>
         <div class="field"><label for="ovOpacity">Overlay strength</label><input type="range" id="ovOpacity" min="15" max="100" step="5" value="60"></div>
         <div class="lgroup"><span class="eyebrow">Property</span>
@@ -2484,7 +2488,7 @@ $('bannerBtn').onclick = () => {
 $('coverage').textContent = `Property lines load from statewide maps in ${STATE_SOURCES.length - 1} states and DC, and from county maps found automatically everywhere else. Where no county map is public, you tap the corners of your land.`;
 
 /* ---------- backup and restore ---------- */
-const APP_VERSION = 'sunplot-v18', BACKUP_KEY = 'sunplot.lastBackup';
+const APP_VERSION = 'sunplot-v19', BACKUP_KEY = 'sunplot.lastBackup';
 function backupNote(n) {
   let last = 0; try { last = +localStorage.getItem(BACKUP_KEY) || 0; } catch {}
   $('btnBackup').hidden = !n;
@@ -3871,8 +3875,17 @@ const BASEMAPS = [
   { id: 'naip', name: 'Farm', tip: 'USDA summer farm photo (NAIP)', make: () => new ExportTiles(imgExport(GIS.naipPlus, 'NaturalColor', 'jpgpng'), { maxZoom: 22, maxNativeZoom: 19, attribution: 'USDA NAIP via USGS' }) },
   { id: 'topo', name: 'Topo', tip: 'USGS topographic map', make: () => L.tileLayer(GIS.topo, { maxZoom: 22, maxNativeZoom: 16, attribution: 'USGS Topo' }) },
   { id: 'relief', name: 'Relief', tip: 'Shaded terrain', make: () => L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSShadedReliefOnly/MapServer/tile/{z}/{y}/{x}', { maxZoom: 22, maxNativeZoom: 16, attribution: 'USGS 3DEP' }) },
-  { id: 'past', name: 'Past', tip: 'Older aerial photos (North Carolina)', nc: true }
+  { id: 'past', name: 'Past', tip: 'Older aerial photos of this spot' }
 ];
+/* Past aerial photos: Esri's World Imagery archive (Wayback, 2014 on, everywhere) plus older state photos. */
+const WAYBACK = {
+  config: 'https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json',
+  base: 'https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer',
+  tile: n => `https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/WMTS/1.0.0/default028mm/MapServer/tile/${n}/{z}/{y}/{x}`
+};
+const KY_BOX = [-89.6, 36.49, -81.96, 39.15];
+const KY_PAST = [['2022', '2022_2FT'], ['2020', '2020_2FT'], ['2018', '2018_2FT'], ['2016', '2016_60cm'], ['2014', '2014_1M'], ['2012', '2012_1M'], ['2010', '2010_1M'], ['2008', '2008_1M'], ['2006', '2006_2FT'], ['2004', '2004_1M']];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const NC_PAST = [['2020_2023', 'Orthoimagery_2020_2023', '2020–23'], ['2016_2019', 'Orthoimagery_2016_2019', '2016–19'], ['2012_2015', 'Orthoimagery_2012_2015', '2012–15'], ['2010', 'Orthoimagery_2010', '2010'], ['2008', 'Orthoimagery_2008', '2008'], ['2006', 'Orthoimagery_2006', '2006'], ['2004', 'Orthoimagery_2004', '2004'], ['2002', 'Orthoimagery_2002', '2002'], ['2000', 'Orthoimagery_2000', '2000'], ['1998', 'Orthoimagery_1998', '1998'], ['1995', 'Orthoimagery_1995', '1995'], ['1993', 'DOQQ_NC_1993', '1993']];
 const OVERLAYS = [
   { id: 'flood', make: () => new ExportTiles(mapExport(GIS.fema, 28), { pane: 'gis', maxZoom: 22, attribution: 'FEMA NFHL' }) },
@@ -3889,26 +3902,108 @@ const ovLayers = new Map();
 let baseExtra = null;
 
 function gisState() {
-  P.gis = P.gis || { base: 'aerial', past: '2016_2019', ov: {}, opacity: 0.6 };
+  P.gis = P.gis || { base: 'aerial', past: '', ov: {}, opacity: 0.6 };
+  if (P.gis.past && !P.gis.past.includes(':')) P.gis.past = 'nc:' + P.gis.past; // older saves
   return P.gis;
 }
-function applyBase() {
-  const g = gisState(), isNC = (P.parcel && P.parcel.state === 'NC') || inBox(STATE_BOX.NC, P.lat0, P.lng0);
-  if (baseExtra) { map.removeLayer(baseExtra); baseExtra = null; }
-  const aerialOn = g.base === 'aerial' || (g.base === 'past' && !isNC);
-  for (const l of [baseTiles, ncTiles]) { if (aerialOn && !map.hasLayer(l)) l.addTo(map); if (!aerialOn && map.hasLayer(l)) map.removeLayer(l); }
-  if (g.base === 'past' && isNC) {
-    const p = NC_PAST.find(x => x[0] === g.past) || NC_PAST[1];
-    baseExtra = new ExportTiles(imgExport(GIS.ncImg(p[1]), null, 'jpgpng'), { maxZoom: 22, maxNativeZoom: 20, attribution: `NC OneMap ${p[2]}` }).addTo(map);
-  } else if (!aerialOn) {
-    const b = BASEMAPS.find(x => x.id === g.base); if (b && b.make) baseExtra = b.make().addTo(map);
+/* ----- past photos ----- */
+let waybackList = null;
+async function waybackReleases() {
+  if (waybackList) return waybackList;
+  let cfg = null;
+  try { const c = JSON.parse(localStorage.getItem('sunplot.wayback') || 'null'); if (c && Date.now() - c.at < 3 * 864e5) cfg = c.cfg; } catch {}
+  if (!cfg) {
+    const j = await getJSON(WAYBACK.config, {}, 15000);
+    cfg = Object.entries(j).map(([n, v]) => { const m = /(\d{4})-(\d{2})-(\d{2})/.exec(v.itemTitle || ''); return m ? { n: +n, d: `${m[1]}-${m[2]}-${m[3]}`, meta: v.metadataLayerUrl || '' } : null; }).filter(Boolean);
+    try { localStorage.setItem('sunplot.wayback', JSON.stringify({ at: Date.now(), cfg })); } catch {}
   }
+  waybackList = cfg.sort((a, b) => b.d.localeCompare(a.d));
+  return waybackList;
+}
+/** Releases where the photo at this spot actually changed (one request per distinct photo). */
+async function waybackHere(lat, lng) {
+  const rel = await waybackReleases(), z = 17, n = 2 ** z;
+  const col = Math.floor((lng + 180) / 360 * n), r = toRad(lat), row = Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n);
+  const out = []; let i = 0;
+  for (let guard = 0; i < rel.length && guard < 60; guard++) {
+    let j; try { j = await getJSON(`${WAYBACK.base}/tilemap/${rel[i].n}/${z}/${row}/${col}`, {}, 10000); } catch { break; }
+    const last = j.select && j.select[0] ? +j.select[0] : rel[i].n;
+    const k = rel.findIndex(x => x.n === last);
+    if (j.data && j.data[0] && k >= 0 && !out.some(o => o.n === last)) out.push({ ...rel[k] });
+    i = Math.max(i, k) + 1;
+  }
+  // when each photo was taken, and by whom (Esri's photo records)
+  await Promise.all(out.map(async o => {
+    if (!o.meta) return;
+    try {
+      const q = new URLSearchParams({ geometry: `${lng},${lat}`, geometryType: 'esriGeometryPoint', inSR: '4326', spatialRel: 'esriSpatialRelIntersects', outFields: 'SRC_DATE,SRC_DATE2,NICE_DESC,SRC_RES', returnGeometry: 'false', f: 'json' });
+      const m = await getJSON(`${o.meta}/${23 - z}/query?${q}`, {}, 10000), a = m.features && m.features[0] && m.features[0].attributes;
+      if (a) { const sd = String(a.SRC_DATE || ''); o.taken = /^\d{8}$/.test(sd) ? `${sd.slice(0, 4)}-${sd.slice(4, 6)}-${sd.slice(6, 8)}` : a.SRC_DATE2 ? new Date(a.SRC_DATE2).toISOString().slice(0, 10) : ''; o.by = a.NICE_DESC || ''; o.res = a.SRC_RES; }
+    } catch {}
+  }));
+  return out;
+}
+function fmtMonth(d) { return `${MONTHS[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`; }
+/** Every past photo for the open place, newest first: [{key, label, year, make}]. */
+function pastOptions() {
+  const out = [], isNC = (P.parcel && P.parcel.state === 'NC') || inBox(STATE_BOX.NC, P.lat0, P.lng0);
+  const isKY = P.parcel ? P.parcel.state === 'KY' : inBox(KY_BOX, P.lat0, P.lng0);
+  for (const o of (P.pastPhotos && P.pastPhotos.list) || []) {
+    const d = o.taken || o.d;
+    out.push({ key: 'wb:' + o.n, year: +d.slice(0, 4), sort: d, label: `${fmtMonth(d)}${o.by ? ' · ' + o.by : ''}${o.taken ? '' : ' (added)'}`,
+      make: () => L.tileLayer(WAYBACK.tile(o.n), { maxZoom: 22, maxNativeZoom: 19, attribution: `Esri World Imagery Wayback${o.by ? ', ' + o.by : ''}` }) });
+  }
+  if (isKY) for (const [y, name] of KY_PAST) out.push({ key: 'ky:' + y, year: +y, sort: `${y}-06-01`, label: `${y} · Kentucky aerial`,
+    make: () => L.tileLayer(`https://kygisserver.ky.gov/arcgis/rest/services/WGS84WM_Services/Ky_Imagery_${name}_WGS84WM/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 22, maxNativeZoom: 19, errorTileUrl: BLANK, attribution: `KyFromAbove / Commonwealth of Kentucky ${y}` }) });
+  if (isNC) for (const [k, svc, label] of NC_PAST) out.push({ key: 'nc:' + k, year: +k.slice(0, 4), sort: `${k.slice(0, 4)}-06-01`, label: `${label} · NC OneMap`,
+    make: () => new ExportTiles(imgExport(GIS.ncImg(svc), null, 'jpgpng'), { maxZoom: 22, maxNativeZoom: 20, attribution: `NC OneMap ${label}` }) });
+  return out.sort((a, b) => b.sort.localeCompare(a.sort));
+}
+let pastLoading = null;
+function loadPastPhotos() {
+  const pp = P.pastPhotos;
+  if (pp && Date.now() - pp.at < 30 * 864e5) return Promise.resolve();
+  if (pastLoading && pastLoading.id === P.id) return pastLoading.p;
+  const proj = P;
+  const p = waybackHere(proj.lat0, proj.lng0)
+    .then(list => { proj.pastPhotos = { at: Date.now(), list }; if (proj === P) saveProject(); })
+    .catch(() => {})
+    .finally(() => { if (pastLoading && pastLoading.p === p) pastLoading = null; });
+  pastLoading = { id: proj.id, p };
+  return p;
+}
+function applyBase() {
+  const g = gisState();
+  if (baseExtra) { map.removeLayer(baseExtra); baseExtra = null; }
+  let past = null, opts = [];
+  if (g.base === 'past') {
+    opts = pastOptions();
+    past = opts.find(o => o.key === g.past) || opts[opts.length - 1] || null;  // default: the oldest
+    if (past) g.past = past.key;
+  }
+  const aerialOn = g.base === 'aerial' || (g.base === 'past' && !past);
+  for (const l of [baseTiles, ncTiles]) { if (aerialOn && !map.hasLayer(l)) l.addTo(map); if (!aerialOn && map.hasLayer(l)) map.removeLayer(l); }
+  if (past) baseExtra = past.make().addTo(map);
+  else if (!aerialOn) { const b = BASEMAPS.find(x => x.id === g.base); if (b && b.make) baseExtra = b.make().addTo(map); }
   if (baseExtra) baseExtra.bringToBack();
   [...$('baseSeg').children].forEach(x => x.classList.toggle('on', x.dataset.id === g.base));
-  $('pastSel').value = g.past; $('baseTip').textContent = (BASEMAPS.find(x => x.id === g.base) || {}).tip || '';
-  $('pastWrap').hidden = !(g.base === 'past');
-  $('pastNote').textContent = isNC ? '' : 'Past aerial photos are available in North Carolina. Elsewhere this shows today\'s aerial.';
-  $('pastSel').hidden = !isNC;
+  $('baseTip').textContent = (BASEMAPS.find(x => x.id === g.base) || {}).tip || '';
+  $('pastWrap').hidden = g.base !== 'past';
+  if (g.base !== 'past') return;
+  const ps = $('pastSel'); ps.textContent = '';
+  for (const o of opts) { const op = document.createElement('option'); op.value = o.key; op.textContent = o.label; ps.appendChild(op); }
+  ps.hidden = !opts.length; if (past) ps.value = past.key;
+  const i = past ? opts.indexOf(past) : -1;
+  $('pastOlder').disabled = !(i >= 0 && i < opts.length - 1); $('pastNewer').disabled = !(i > 0);
+  $('pastOlder').hidden = $('pastNewer').hidden = !opts.length;
+  const loading = !P.pastPhotos || Date.now() - P.pastPhotos.at >= 30 * 864e5;
+  $('pastNote').textContent = loading ? 'Finding past photos of this spot…'
+    : opts.length ? `${opts.length} photo${opts.length === 1 ? '' : 's'} of this spot. Dates are when the photo was taken${opts.some(o => o.key.startsWith('wb:')) ? '; "added" means the date it was published' : ''}.`
+    : 'No past photos found here. Showing today\'s aerial.';
+  if (loading) {
+    const id = P.id;
+    loadPastPhotos().then(() => { if (P && P.id === id && gisState().base === 'past') applyBase(); });
+  }
 }
 let ovFor = null, ovPending = 0;
 function ovLoading(d) { ovPending = Math.max(0, ovPending + d); $('mapLoading').hidden = ovPending === 0; }
@@ -3948,8 +4043,10 @@ function clearGisLayers() {
     seg.appendChild(x);
   }
   const ps = $('pastSel');
-  for (const [k, , label] of NC_PAST) { const o = document.createElement('option'); o.value = k; o.textContent = label; ps.appendChild(o); }
   ps.onchange = () => { gisState().past = ps.value; applyBase(); saveProject(); };
+  const step = d => { const o = [...ps.options], i = o.findIndex(x => x.value === ps.value) + d; if (o[i]) { ps.value = o[i].value; ps.onchange(); } };
+  $('pastOlder').onclick = () => step(1);
+  $('pastNewer').onclick = () => step(-1);
   for (const o of OVERLAYS) { const cb = $('ov-' + o.id); if (cb) cb.onchange = () => { gisState().ov[o.id] = cb.checked; applyOverlays(); saveProject(); }; }
   $('ovOpacity').oninput = () => { gisState().opacity = +$('ovOpacity').value / 100; applyOverlays(); };
   $('ovOpacity').onchange = () => saveProject();

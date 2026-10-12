@@ -82,7 +82,7 @@ The relay only forwards map and data services, and caches answers for a day. The
 Once a property is open, four tabs sit under its name:
 
 - **Overview:** tiles for land size, sun, growing season, soil, flood, terrain, tax value and garden status. Tap a tile for details.
-- **Layers:** base maps (aerial, USDA farm photo, USGS topo, shaded relief, and past aerial photos back to 1993 in North Carolina) and overlays for flood zones, wetlands, streams, soil types, land cover, plant health, contours, slope, slope direction, property lines, sun hours and shadows. Tap the map to see what's at any spot: sun, elevation, slope, soil, flood zone, wetland and land cover.
+- **Layers:** base maps (aerial, USDA farm photo, USGS topo, shaded relief, and past aerial photos: Esri's World Imagery archive from 2014 on everywhere, Kentucky's statewide photos back to 2004, North Carolina's back to 1993) and overlays for flood zones, wetlands, streams, soil types, land cover, plant health, contours, slope, slope direction, property lines, sun hours and shadows. Tap the map to see what's at any spot: sun, elevation, slope, soil, flood zone, wetland and land cover.
 - **Sun:** date and time controls and "Where should my garden go?"
 - **Garden:** add beds, trees and buildings, and edit the selected one.
 
