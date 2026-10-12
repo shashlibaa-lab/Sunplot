@@ -1,3 +1,7 @@
 name = "sunplot-relay"
 main = "worker.js"
 compatibility_date = "2025-09-01"
+
+[vars]
+PRO_SKU = "sunplot_pro"
+# Secrets (not in this file): npx wrangler secret put GOOGLE_SA ; npx wrangler secret put PACKAGE_NAME

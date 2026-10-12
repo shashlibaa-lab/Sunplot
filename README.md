@@ -77,6 +77,24 @@ A few county servers refuse requests that come straight from an app (they show a
 
 The relay only forwards map and data services, and caches answers for a day. The free plan covers 100,000 requests a day.
 
+## Free and Pro
+
+The app is free with a one-time **Sunplot Pro** upgrade ($4.99) through Google Play Billing. No ads.
+
+- **Free:** find any property, property lines and public records, sun hours and shade, the dashboard, map layers, one saved place.
+- **Pro:** unlimited saved places, beds, rows and crops with the planting calendar, past aerial photos, the printable report, backup files.
+
+Settings in `CONFIG`: `proSku` (product ID in Play Console, default `sunplot_pro`), `proPrice`, `billingServer` (defaults to the relay), `playUrl`, and `betaUnlock` (testers can unlock Pro free; **set to false before launch**).
+
+To switch on real purchases:
+1. In Play Console, create a one-time in-app product with ID `sunplot_pro` at $4.99, and link a merchant account.
+2. In Google Cloud, create a service account, give it access to the app in Play Console (Users and permissions → financial data and orders), and download its JSON key.
+3. In `relay/`: `npx wrangler secret put GOOGLE_SA` (paste the JSON key), `npx wrangler secret put PACKAGE_NAME` (the app's Android package name), then `npx wrangler deploy`. The relay's `/verify` checks each purchase with Google and acknowledges it (unacknowledged purchases are refunded after 3 days).
+4. In PWABuilder (or Bubblewrap), turn on Play Billing for the Android package.
+5. Set `CONFIG.relay` (or `CONFIG.billingServer`), `CONFIG.playUrl`, and `CONFIG.betaUnlock = false`, then publish.
+
+Purchases only work inside the Play Store app; the website shows the Pro screen with a link to Google Play.
+
 ## Speed
 
 **Check map sources → Speed on this phone** shows real timings recorded on that phone against the launch targets: map on screen after opening (target under 3 s), search to property lines, Plan to a filled dashboard, and search to full dashboard (target under 8 s). Timings stay on the phone and are added to **Copy results**.

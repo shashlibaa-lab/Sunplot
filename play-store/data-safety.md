@@ -34,8 +34,16 @@ Use these in Play Console → App content → Data safety. They match privacy.ht
 ### Personal info → Email address
 - Collected: **Yes**, only because a problem report arrives from the user's email address. Optional. Purpose: **Developer communications** and **App functionality**. Not shared.
 
+### Financial info → Purchase history
+(The Google Play receipt code for Sunplot Pro, sent to the purchase checker to unlock Pro.)
+- Collected: **Yes**
+- Shared: **No**
+- Processed ephemerally: **No**
+- Required or optional: **Optional** (only when someone buys Pro)
+- Purpose: **App functionality**
+
 ### Everything else
-Name, phone, financial info, health, messages, photos, audio, files, calendar, contacts, app activity, web history, crash logs, device IDs: **Not collected.**
+Name, phone, payment info (cards and bank accounts are handled only by Google), health, messages, photos, audio, files, calendar, contacts, app activity, web history, crash logs, device IDs: **Not collected.**
 (The app stores plans on the device only. Backup files are saved on the device and go only where the user puts them. Nothing is sent to the developer except a problem report the user chooses to email. No analytics, automatic crash reporting, ads or accounts.)
 
 ## Other App content forms
@@ -48,4 +56,5 @@ Name, phone, financial info, health, messages, photos, audio, files, calendar, c
 - News app: **No**
 - Government app: **No** (it uses public government data but isn't made by a government)
 - Financial features: **No**
+- In-app purchases: **Yes** (Sunplot Pro, one-time, through Google Play Billing)
 - Health: **No**

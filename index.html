@@ -887,6 +887,16 @@ input[type=range]{width:100%;accent-color:var(--sun);height:28px}
 .rinfo summary{cursor:pointer;font-size:.85rem;color:var(--muted)}
 .rinfo pre{white-space:pre-wrap;word-break:break-word;font:.75rem/1.45 var(--f-mono);background:var(--paper-2);border-radius:8px;padding:10px;margin:8px 0 0;max-height:30vh;overflow:auto}
 #reportSheet .mcard{max-height:calc(100dvh - 32px);overflow:auto}
+/* Sunplot Pro */
+.procard{gap:10px}
+.probadge{justify-self:start;background:var(--sun);color:#1f3326;font:800 .72rem/1 var(--f-body);letter-spacing:.08em;border-radius:6px;padding:5px 8px}
+.prolist{margin:0;padding-left:1.2em;display:grid;gap:4px}
+.proprice{margin:0}
+.proprice b{font-size:1.2rem}
+#proReplace,#proRestore{width:100%}
+body.free .needpro::after{content:"PRO";margin-left:6px;background:var(--sun);color:#1f3326;font:800 .62rem/1 var(--f-body);letter-spacing:.06em;border-radius:4px;padding:3px 5px;vertical-align:middle}
+#proLine{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#proLine .btn{min-height:36px;padding:6px 12px}
 /* messages with buttons */
 .status .acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .status .acts .btn{min-height:40px;padding:8px 14px}
@@ -1061,6 +1071,26 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
   </div>
 </div>
 
+<div class="modal" id="proSheet" hidden role="dialog" aria-modal="true" aria-labelledby="proTitle">
+  <div class="mcard procard">
+    <div class="probadge" aria-hidden="true">PRO</div>
+    <h2 id="proTitle">Sunplot Pro</h2>
+    <p class="muted" id="proWhy"></p>
+    <ul class="prolist">
+      <li>Unlimited saved places</li>
+      <li>Bed, row and crop planner with the planting calendar</li>
+      <li>Past aerial photos of your land</li>
+      <li>Printable property report</li>
+      <li>Backup files for a new phone</li>
+    </ul>
+    <p class="proprice"><b id="proPrice">$4.99</b> once. No ads, no subscription.</p>
+    <p class="status" id="proStatus" role="status" hidden></p>
+    <div class="row grow"><button class="btn" id="proLater" type="button">Not now</button><button class="btn primary" id="proBuy" type="button">Unlock Pro</button></div>
+    <button class="btn" id="proReplace" type="button" hidden></button>
+    <button class="btn ghost" id="proRestore" type="button">Restore purchase</button>
+  </div>
+</div>
+
 <div class="modal" id="renameSheet" hidden role="dialog" aria-modal="true" aria-labelledby="renameTitle">
   <form class="mcard" id="renameForm">
     <h2 id="renameTitle">Rename place</h2>
@@ -1139,6 +1169,7 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
       </div>
       <p class="note" id="coverage"></p>
       <div class="row"><button class="btn ghost" id="btnCheck">Check map sources</button><button class="btn ghost" id="btnReportFind" type="button">Report a problem</button></div>
+      <p class="note" id="proLine"></p>
       <p class="note footlinks"><a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a> · <a href="terms.html" target="_blank" rel="noopener">Terms of use</a></p>
     </div>
 
@@ -1936,7 +1967,13 @@ const CONFIG = {
   ownerOptOut: [],
   /* Optional relay for county map servers that refuse requests from apps. Deploy relay/worker.js
      (see README) and paste its address here, e.g. 'https://sunplot-relay.yourname.workers.dev'. */
-  relay: ''
+  relay: '',
+  /* Sunplot Pro: a one-time Google Play purchase. */
+  proSku: 'sunplot_pro',       // product ID created in Play Console
+  proPrice: '$4.99',           // shown until Google Play reports the real local price
+  billingServer: '',           // where purchases are checked (the relay's /verify); empty = use CONFIG.relay
+  playUrl: '',                 // the Play Store listing, for people using the website
+  betaUnlock: true             // testers can unlock Pro for free; set false before launch
 };
 
 const SVC = {
@@ -2663,7 +2700,7 @@ $('bannerBtn').onclick = () => {
 $('coverage').textContent = `Property lines load from statewide maps in ${STATE_SOURCES.length - 1} states and DC, and from county maps found automatically everywhere else. Where no county map is public, you tap the corners of your land.`;
 
 /* ---------- backup and restore ---------- */
-const APP_VERSION = 'sunplot-v22', BACKUP_KEY = 'sunplot.lastBackup';
+const APP_VERSION = 'sunplot-v23', BACKUP_KEY = 'sunplot.lastBackup';
 function backupNote(n) {
   let last = 0; try { last = +localStorage.getItem(BACKUP_KEY) || 0; } catch {}
   $('btnBackup').hidden = !n;
@@ -4815,6 +4852,141 @@ function ringCenter(ring) {
 /* ---------- start ---------- */
 show('find');
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+
+/* ---------- Sunplot Pro: free vs Pro, Google Play purchase ---------- */
+const PRO_KEY = 'sunplot.pro';
+function proState() { try { return JSON.parse(localStorage.getItem(PRO_KEY)) || null; } catch { return null; } }
+function isPro() { const s = proState(); return !!s && (s.via === 'play' || (s.via === 'beta' && CONFIG.betaUnlock)); }
+function setPro(via) { try { localStorage.setItem(PRO_KEY, JSON.stringify({ via, at: Date.now() })); } catch {} proUI(); }
+function clearPro() { try { localStorage.removeItem(PRO_KEY); } catch {} proUI(); }
+function proUI() {
+  const pro = isPro();
+  document.body.classList.toggle('free', !pro);
+  const line = $('proLine'); line.textContent = '';
+  const t = document.createElement('span');
+  t.textContent = pro ? 'Sunplot Pro is unlocked. Thank you!' : 'Free version: one saved place, sun and property tools.';
+  line.appendChild(t);
+  if (!pro) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = 'See Pro'; b.onclick = () => upgrade(''); line.appendChild(b); }
+}
+const billingServer = () => (CONFIG.billingServer || CONFIG.relay || '').replace(/\/+$/, '');
+let billingSvc = null;
+/** Google Play's billing, only inside the Play Store app and once the purchase checker is set up. */
+async function playBilling() {
+  if (billingSvc !== null) return billingSvc;
+  billingSvc = false;
+  if (!('getDigitalGoodsService' in window) || !billingServer()) return false;
+  try { billingSvc = await window.getDigitalGoodsService('https://play.google.com/billing'); } catch { billingSvc = false; }
+  return billingSvc;
+}
+async function verifyPurchase(token) {
+  const j = await rawJSON(`${billingServer()}/verify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sku: CONFIG.proSku, token }) }, 20000);
+  return !!(j && j.ok);
+}
+/** On start (Play app only): restore Pro if this Google account bought it; drop it if the purchase was refunded. */
+async function checkPurchases(quiet = true) {
+  const svc = await playBilling();
+  if (!svc) return null;
+  try {
+    const own = (await svc.listPurchases()).find(x => x.itemId === CONFIG.proSku);
+    if (own) { setPro('play'); verifyPurchase(own.purchaseToken).catch(() => {}); return true; }
+    if (proState() && proState().via === 'play') clearPro();
+    return false;
+  } catch { return quiet ? null : false; }
+}
+async function showPrice() {
+  const svc = await playBilling(); if (!svc) return;
+  try {
+    const d = (await svc.getDetails([CONFIG.proSku]))[0];
+    if (d && d.price) $('proPrice').textContent = new Intl.NumberFormat(undefined, { style: 'currency', currency: d.price.currency }).format(d.price.value);
+  } catch {}
+}
+let proAfter = null;
+/** Open the Pro sheet. why = what the user just tried; then = what to do once unlocked. */
+async function upgrade(why, then = null, extra = null) {
+  proAfter = then;
+  $('proWhy').textContent = why || 'Everything in the free version, plus:';
+  say($('proStatus'), '');
+  const rep = $('proReplace'); rep.hidden = !extra; if (extra) { rep.textContent = extra.label; rep.onclick = () => { $('proSheet').hidden = true; extra.fn(); }; }
+  const buy = $('proBuy'), svc = await playBilling();
+  buy.disabled = false;
+  if (svc) { buy.textContent = 'Unlock Pro'; buy.onclick = buyPro; showPrice(); }
+  else if (CONFIG.betaUnlock) { buy.textContent = 'Try Pro free (beta)'; buy.onclick = () => { setPro('beta'); proDone('Pro is unlocked for the beta. Thanks for testing!'); }; }
+  else if (CONFIG.playUrl) { buy.textContent = 'Get it on Google Play'; buy.onclick = () => window.open(CONFIG.playUrl, '_blank', 'noopener'); }
+  else { buy.textContent = 'Coming soon to Google Play'; buy.disabled = true; }
+  $('proRestore').hidden = !svc;
+  $('proSheet').hidden = false;
+}
+function proDone(msg) {
+  say($('proStatus'), msg, 'ok');
+  setTimeout(() => { $('proSheet').hidden = true; const f = proAfter; proAfter = null; if (f) f(); }, 900);
+}
+async function buyPro() {
+  const buy = $('proBuy'); buy.disabled = true; say($('proStatus'), 'Opening Google Play…');
+  try {
+    const req = new PaymentRequest([{ supportedMethods: 'https://play.google.com/billing', data: { sku: CONFIG.proSku } }], { total: { label: 'Total', amount: { currency: 'USD', value: '0' } } });
+    const res = await req.show();
+    say($('proStatus'), 'Confirming your purchase…');
+    let ok = false; try { ok = await verifyPurchase(res.details.purchaseToken); } catch {}
+    await res.complete(ok ? 'success' : 'fail');
+    if (ok) { setPro('play'); proDone('Pro is unlocked. Thank you!'); }
+    else say($('proStatus'), "Google Play took the order but we couldn't confirm it yet. Tap Restore purchase in a minute; if it still doesn't unlock, tap Report a problem.", 'err');
+  } catch (e) {
+    say($('proStatus'), e && e.name === 'AbortError' ? '' : "The purchase didn't go through. Nothing was charged.", e && e.name === 'AbortError' ? '' : 'err');
+  } finally { buy.disabled = false; }
+}
+$('proLater').onclick = () => { $('proSheet').hidden = true; proAfter = null; };
+$('proSheet').onclick = e => { if (e.target === $('proSheet')) $('proLater').onclick(); };
+$('proRestore').onclick = async () => {
+  say($('proStatus'), 'Checking with Google Play…');
+  const r = await checkPurchases(false);
+  if (r) proDone('Your purchase is restored.'); else say($('proStatus'), "This Google account hasn't bought Sunplot Pro yet.", 'err');
+};
+addEventListener('keydown', e => { if (e.key === 'Escape' && !$('proSheet').hidden) $('proLater').onclick(); });
+
+/* What Pro unlocks: wrap those buttons. Free users see the Pro sheet first. */
+function needPro(id, why) {
+  const el = $(id), orig = el.onclick; el.classList.add('needpro');
+  el.onclick = function (e) { if (isPro()) return orig.call(this, e); upgrade(why, () => orig.call(this, e)); };
+}
+needPro('addBed', 'Planning beds is part of Sunplot Pro.');
+needPro('btnRows', 'Rows and crops are part of Sunplot Pro.');
+needPro('btnTodo', 'The planting calendar is part of Sunplot Pro.');
+needPro('btnPrint', 'The printable property report is part of Sunplot Pro.');
+needPro('btnBackup', 'Backup files are part of Sunplot Pro.');
+needPro('selBackup', 'Backup files are part of Sunplot Pro.');
+needPro('selCopy', 'Copying places is part of Sunplot Pro (the free version keeps one place).');
+{ const past = [...$('baseSeg').children].find(x => x.dataset.id === 'past'); if (past) { past.id = 'basePast'; needPro('basePast', 'Past aerial photos are part of Sunplot Pro.'); } }
+// beds from "Find the best spots" go through addItem
+const addItem0 = addItem;
+addItem = function (type, ...rest) {
+  if (type === 'bed' && !isPro()) { placing = null; banner(null); return upgrade('Planning beds is part of Sunplot Pro.', () => addItem0(type, ...rest)); }
+  return addItem0(type, ...rest);
+};
+// the free version keeps one saved place
+{
+  const plan0 = $('btnPlan').onclick;
+  $('btnPlan').onclick = function (e) {
+    const c = candidate, id = c && c.src ? (c.src.st || 'US') + '-' + c.parno : null;
+    const others = DB.order.filter(i => DB.projects[i] && i !== id);
+    if (isPro() || (id && DB.projects[id]) || !others.length) return plan0.call(this, e);
+    const old = DB.projects[others[0]];
+    upgrade(`The free version keeps one saved place, and you have "${old.name}".`, () => plan0.call(this, e),
+      { label: `Replace "${old.name}" with this one`, fn: () => { for (const i of others) delete DB.projects[i]; DB.order = DB.order.filter(i => !others.includes(i)); store.save(DB); plan0.call(this, e); } });
+  };
+}
+// restoring a backup can't add places beyond the free limit
+{
+  const restore0 = restoreBackup;
+  restoreBackup = function (data) {
+    if (!isPro() && data && data.projects) {
+      const ids = Object.keys(data.projects), after = new Set([...DB.order.filter(i => DB.projects[i]), ...ids]);
+      if (after.size > 1) { upgrade('Restoring more than one place needs Sunplot Pro.', () => { try { const r = restore0(data); renderSaved(); backupStatus(r ? `Restored ${r.added + r.replaced} place${r.added + r.replaced === 1 ? '' : 's'}.` : ''); } catch (err) { backupStatus(err.message, true); } }); return null; }
+    }
+    return restore0(data);
+  };
+}
+proUI();
+checkPurchases();
 </script>
 </body>
 </html>
