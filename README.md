@@ -60,6 +60,15 @@ A few county servers refuse requests that come straight from an app (they show a
 
 The relay only forwards map and data services, and caches answers for a day. The free plan covers 100,000 requests a day.
 
+## Property dashboard
+
+Once a property is open, four tabs sit under its name:
+
+- **Overview:** tiles for land size, sun, growing season, soil, flood, terrain, tax value and garden status. Tap a tile for details.
+- **Layers:** base maps (aerial, USDA farm photo, USGS topo, shaded relief, and past aerial photos back to 1993 in North Carolina) and overlays for flood zones, wetlands, streams, soil types, land cover, plant health, contours, slope, slope direction, property lines, sun hours and shadows. Tap the map to see what's at any spot: sun, elevation, slope, soil, flood zone, wetland and land cover.
+- **Sun:** date and time controls and "Where should my garden go?"
+- **Garden:** add beds, trees and buildings, and edit the selected one.
+
 ## Planning beds
 
 Tap a bed on the map, then **Plan rows and crops**. Each bed is split into rows (30 in planted, 18 in paths by default; change it under Bed setup, or turn the rows across the bed). Tap a row to add a crop: the app suggests dates from the property's frost dates, finds open space in the row, splits successions into equal plantings, and counts plants and seeds. **Planting calendar and seed list** on the map screen shows every task week by week and the seeds to buy. The crop list and its typical spacing and timing live in `CROP_LIB` in `index.html`.

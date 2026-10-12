@@ -844,6 +844,46 @@ input[type=range]{width:100%;accent-color:var(--sun);height:28px}
 .suggest button{text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:11px 12px;font:500 .92rem var(--f-body);color:var(--ink);cursor:pointer}
 .suggest button:last-child{border-bottom:0}
 .suggest button:hover,.suggest button:focus-visible{background:var(--paper)}
+/* property dashboard */
+.ptabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--paper-2);border-radius:12px;padding:4px;position:sticky;top:-4px;z-index:2;box-shadow:0 4px 10px -8px rgba(0,0,0,.25)}
+.ptabs button{border:0;background:none;border-radius:9px;padding:9px 2px;font:600 .86rem var(--f-body);color:var(--muted);cursor:pointer;min-height:40px}
+.ptabs button.on{background:var(--paper);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.tabp{display:grid;gap:14px}
+.dash{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.tile{display:grid;gap:3px;align-content:start;text-align:left;background:var(--paper-2);border:1px solid transparent;border-radius:12px;padding:11px 12px;min-width:0;color:var(--ink);font:inherit}
+.tile.tap{cursor:pointer}
+.tile.tap:hover{border-color:var(--line)}
+.tile.wide{grid-column:1/-1}
+.tile small{display:flex;align-items:center;gap:6px;font:600 .66rem var(--f-body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.tile small .dot{width:8px;height:8px;margin:0;flex:none}
+.tile b{font:700 1.18rem/1.15 var(--f-display);font-stretch:85%;overflow-wrap:anywhere}
+.tile p{font-size:.76rem;color:var(--muted);line-height:1.3}
+.lhead{display:flex;align-items:center;gap:10px}
+.lhead h2{flex:1}
+.lhead .btn{min-height:0;padding:4px 6px}
+.seg{display:flex;flex-wrap:wrap;gap:4px;background:var(--paper-2);border-radius:12px;padding:4px}
+.seg button{flex:1 1 0;min-width:0;border:0;background:none;border-radius:9px;padding:8px 10px;font:600 .82rem var(--f-body);color:var(--muted);cursor:pointer;min-height:38px}
+.seg button.on{background:var(--pine);color:#f3f0e2}
+.lgroup{display:grid;gap:2px}
+.lgroup .eyebrow{padding:4px 2px 6px}
+.sw{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;padding:9px 12px;background:var(--paper-2);border-radius:10px;cursor:pointer}
+.sw + .sw{margin-top:4px}
+.sw input{position:absolute;opacity:0;width:1px;height:1px}
+.sw span{display:grid;gap:1px;min-width:0}
+.sw b{font:600 .92rem var(--f-body)}
+.sw small{font-size:.76rem;color:var(--muted)}
+.sw i{width:42px;height:24px;border-radius:99px;background:var(--line);position:relative;transition:background .15s}
+.sw i::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s}
+.sw input:checked + span + i{background:var(--sun)}
+.sw input:checked + span + i::after{transform:translateX(18px)}
+.sw input:focus-visible + span + i{outline:2px solid var(--sun);outline-offset:2px}
+.here{border-color:var(--sun)}
+.hlist{display:grid;gap:6px}
+.hrow{display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px;font-size:.88rem;align-items:baseline}
+.hrow small{font:600 .68rem var(--f-body);text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.hrow b{font-weight:600}
+.hrow.dim b{color:var(--muted);font-weight:500}
+@media (prefers-reduced-motion:reduce){.sw i,.sw i::after{transition:none}}
 /* map source check */
 .cklist{display:grid;gap:6px}
 .ck{display:grid;grid-template-columns:12px minmax(0,1fr);gap:10px;align-items:start;padding:8px 10px;background:var(--paper-2);border-radius:8px;font-size:.88rem}
@@ -997,16 +1037,87 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
         <h1 id="planTitle"></h1><p class="muted small" id="planSub"></p>
       </div>
 
-      <div class="tools">
-        <button class="btn tb" id="addBed"><i></i>Add bed</button>
-        <button class="btn tt" id="addTree"><i></i>Add trees</button>
-        <button class="btn tg" id="addBldg"><i></i>Add buildings</button>
+      <div class="ptabs" id="planTabs" role="tablist">
+        <button type="button" role="tab" data-tab="overview">Overview</button>
+        <button type="button" role="tab" data-tab="layers">Layers</button>
+        <button type="button" role="tab" data-tab="sun">Sun</button>
+        <button type="button" role="tab" data-tab="garden">Garden</button>
       </div>
-      <button class="btn rbtn" id="btnReport">Property report · soil, flood, frost</button>
-      <button class="btn rbtn" id="btnTodo">Planting calendar and seed list</button>
-      <p class="status" id="planWeek" hidden></p>
-      <p class="status" id="planStatus"></p>
 
+      <div class="tabp" id="tp-overview">
+        <div class="dash" id="dash"></div>
+        <p class="status" id="planWeek" hidden></p>
+        <div class="row grow"><button class="btn" id="btnReport">Full report</button><button class="btn" id="btnTodo">Planting calendar</button></div>
+        <button class="btn ghost" id="btnPrint" style="justify-self:start">Print or save as PDF</button>
+      </div>
+
+      <div class="tabp" id="tp-layers" hidden>
+        <div class="lhead"><h2>Base map</h2></div>
+        <div class="seg" id="baseSeg" role="group" aria-label="Base map"></div>
+        <p class="note" id="baseTip"></p>
+        <div class="field" id="pastWrap" hidden><label for="pastSel">Year</label><select id="pastSel"></select><p class="note" id="pastNote"></p></div>
+        <div class="lhead"><h2>Overlays</h2><span class="muted small" id="layerCount"></span><button class="btn ghost" id="ovClear" type="button">Clear</button></div>
+        <div class="field"><label for="ovOpacity">Overlay strength</label><input type="range" id="ovOpacity" min="15" max="100" step="5" value="60"></div>
+        <div class="lgroup"><span class="eyebrow">Property</span>
+          <label class="sw"><input type="checkbox" id="lyParcels"><span><b>Property lines</b><small>Neighboring parcels from county maps</small></span><i></i></label>
+        </div>
+        <div class="lgroup"><span class="eyebrow">Water and flood</span>
+          <label class="sw"><input type="checkbox" id="ov-flood"><span><b>Flood zones</b><small>FEMA. Red/blue = 100-year floodplain</small></span><i></i></label>
+          <label class="sw"><input type="checkbox" id="ov-wetland"><span><b>Wetlands</b><small>US Fish and Wildlife inventory</small></span><i></i></label>
+          <label class="sw"><input type="checkbox" id="ov-water"><span><b>Streams and ponds</b><small>USGS hydrography</small></span><i></i></label>
+        </div>
+        <div class="lgroup"><span class="eyebrow">Soil and land</span>
+          <label class="sw"><input type="checkbox" id="ov-soil"><span><b>Soil types</b><small>USDA soil survey map units</small></span><i></i></label>
+          <label class="sw"><input type="checkbox" id="ov-landcover"><span><b>Land cover</b><small>Forest, pasture, crops, developed (2021)</small></span><i></i></label>
+          <label class="sw"><input type="checkbox" id="ov-ndvi"><span><b>Plant health</b><small>Greener = more vigorous growth (NAIP)</small></span><i></i></label>
+        </div>
+        <div class="lgroup"><span class="eyebrow">Terrain</span>
+          <label class="sw"><input type="checkbox" id="ov-contours"><span><b>Contour lines</b><small>USGS topographic contours</small></span><i></i></label>
+          <label class="sw"><input type="checkbox" id="lyCont"><span><b>Fine contours</b><small>From elevation over this property</small></span><i></i></label>
+          <label class="sw"><input type="checkbox" id="ov-slope"><span><b>Slope</b><small>Steeper ground is darker</small></span><i></i></label>
+          <label class="sw"><input type="checkbox" id="ov-aspect"><span><b>Slope direction</b><small>Which way the ground faces</small></span><i></i></label>
+        </div>
+        <div class="lgroup"><span class="eyebrow">Sun</span>
+          <label class="sw"><input type="checkbox" id="lyHeat" checked><span><b>Sun-hours map</b><small>Hours of direct sun on the chosen date</small></span><i></i></label>
+          <label class="sw"><input type="checkbox" id="lyShade" checked><span><b>Shadows</b><small>From your trees and buildings</small></span><i></i></label>
+        </div>
+        <p class="note">Tap anywhere on the map to see what's there.</p>
+        <div class="card here" id="here" hidden>
+          <div class="card-h"><h2>What's here</h2><button class="btn ghost" id="hereClose" type="button">Close</button></div>
+          <p class="muted small" id="hereWhere"></p>
+          <div class="hlist" id="hereList"></div>
+        </div>
+      </div>
+
+      <div class="tabp" id="tp-sun" hidden>
+      <div class="card">
+        <div class="card-h"><h2>Sun</h2><span class="legend"><span>0 h</span><b></b><span id="legMax">–</span></span></div>
+        <div class="chips" id="seasonChips"></div>
+        <div class="field"><label for="date">Date <span id="dateV"></span></label><input type="range" id="date" min="0" max="364" step="1"></div>
+        <div class="field"><label for="time">Shadows at <span id="timeV"></span></label><input type="range" id="time" min="300" max="1260" step="5"></div>
+        <p class="note" id="sunNote">Colors show hours of direct sun on the chosen date. Yellow is the most sun this property can get that day.</p>
+      </div>
+
+      <div class="card" id="finder">
+        <div class="card-h"><h2>Where should my garden go?</h2></div>
+        <div class="dims">
+          <div class="field"><label for="fLen">Bed length ft</label><input type="number" id="fLen" min="4" max="400" step="1" value="25" inputmode="decimal"></div>
+          <div class="field"><label for="fWid">Width ft</label><input type="number" id="fWid" min="2" max="80" step="0.5" value="4" inputmode="decimal"></div>
+        </div>
+        <div class="chips" id="needChips"></div>
+        <button class="btn primary" id="btnFind">Find the best spots</button>
+        <div class="list" id="spots"></div>
+      </div>
+
+      </div>
+
+      <div class="tabp" id="tp-garden" hidden>
+        <div class="tools">
+          <button class="btn tb" id="addBed"><i></i>Add bed</button>
+          <button class="btn tt" id="addTree"><i></i>Add trees</button>
+          <button class="btn tg" id="addBldg"><i></i>Add buildings</button>
+        </div>
+        <p class="status" id="planStatus"></p>
       <div class="card" id="selCard" hidden>
         <div class="card-h"><h2 id="selName"></h2><button class="btn ghost danger" id="btnDel">Remove</button></div>
 
@@ -1048,33 +1159,8 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
         <p class="note">Drag the round handle on the map to move it.</p>
       </div>
 
-      <div class="card" id="finder">
-        <div class="card-h"><h2>Where should my garden go?</h2></div>
-        <div class="dims">
-          <div class="field"><label for="fLen">Bed length ft</label><input type="number" id="fLen" min="4" max="400" step="1" value="25" inputmode="decimal"></div>
-          <div class="field"><label for="fWid">Width ft</label><input type="number" id="fWid" min="2" max="80" step="0.5" value="4" inputmode="decimal"></div>
-        </div>
-        <div class="chips" id="needChips"></div>
-        <button class="btn primary" id="btnFind">Find the best spots</button>
-        <div class="list" id="spots"></div>
+        <p class="note">Tree and building heights are estimates you set. Hills blocking the sun aren't counted. Times use this phone's time zone. Plans save on this device.</p>
       </div>
-
-      <div class="card">
-        <div class="card-h"><h2>Sun</h2><span class="legend"><span>0 h</span><b></b><span id="legMax">–</span></span></div>
-        <div class="chips" id="seasonChips"></div>
-        <div class="field"><label for="date">Date <span id="dateV"></span></label><input type="range" id="date" min="0" max="364" step="1"></div>
-        <div class="field"><label for="time">Shadows at <span id="timeV"></span></label><input type="range" id="time" min="300" max="1260" step="5"></div>
-        <div class="layers">
-          <label><input type="checkbox" id="lyHeat" checked> Sun-hours map</label>
-          <label><input type="checkbox" id="lyShade" checked> Shadows</label>
-          <label><input type="checkbox" id="lyCont"> Contours</label>
-          <label><input type="checkbox" id="lyParcels"> Neighbor lines</label>
-        </div>
-        <p class="note" id="sunNote">Colors show hours of direct sun on the chosen date. Yellow is the most sun this property can get that day.</p>
-      </div>
-
-      <button class="btn" id="btnPrint">Print or save as PDF</button>
-      <p class="note">Tree and building heights are estimates you set. Hills blocking the sun aren't counted. Times use this phone's time zone. Plans save on this device.</p>
     </div>
 
 
@@ -1937,7 +2023,7 @@ async function loadTerrain(frame, bXY) {
 /* ---------- map ---------- */
 const map = L.map('map', { zoomControl: false, maxZoom: 22 }).setView([37.5, -84], 5);
 const baseTiles = L.tileLayer(SVC.usImagery, { maxNativeZoom: 16, maxZoom: 22, attribution: 'Imagery <a href="https://www.usgs.gov/" target="_blank" rel="noopener">USGS</a>' }).addTo(map);
-L.tileLayer(SVC.ncImagery, { minZoom: 15, maxNativeZoom: 20, maxZoom: 22, errorTileUrl: BLANK, attribution: '<a href="https://www.nconemap.gov/" target="_blank" rel="noopener">NC OneMap</a>' }).addTo(map);
+const ncTiles = L.tileLayer(SVC.ncImagery, { minZoom: 15, maxNativeZoom: 20, maxZoom: 22, errorTileUrl: BLANK, attribution: '<a href="https://www.nconemap.gov/" target="_blank" rel="noopener">NC OneMap</a>' }).addTo(map);
 const ParcelTiles = L.TileLayer.extend({
   getTileUrl(c) {
     const W = 20037508.342789244, s = (2 * W) / Math.pow(2, c.z), xmin = -W + c.x * s, ymax = W - c.y * s;
@@ -2271,6 +2357,7 @@ function openProject(p) {
   $('lyHeat').checked = P.layers.heat; $('lyShade').checked = P.layers.shade; $('lyCont').checked = P.layers.cont; $('lyParcels').checked = P.layers.parcels;
   applyParcelLayer();
   show('plan');
+  applyBase(); applyOverlays(); planTab(P.tab || 'overview');
   hint();
   castersChanged(); renderItems(); renderShade(); renderSel();
   saveProject();
@@ -2286,6 +2373,7 @@ function hint() {
     : !hasBeds ? 'Now tap "Find the best spots" below, or add a bed yourself.' : '';
 }
 $('btnAll').onclick = () => {
+  clearGisLayers();
   P = null; for (const l of [lyBoundary, lyItems, lyHandle, lyShade, lyHeat, lyCont, lySpots]) l.clearLayers();
   placing = null; banner(null); if (!parcelLines._map) parcelLines.addTo(map); show('find');
 };
@@ -2311,6 +2399,7 @@ function addItem(type, x, y, extra) {
   else { const d = P.bldgDefault; it = { type, x, y, h: d.h, w: d.w, d: d.d, rot: 0, name: uniqueName(d.name, null) }; }
   it.id = Math.random().toString(36).slice(2, 9);
   P.items.push(it); selId = it.id;
+  if (mode === 'plan' && planTabNow !== 'garden') planTab('garden');
   changed(type !== 'bed'); hint();
   return it;
 }
@@ -2341,6 +2430,7 @@ map.on('click', e => {
     if (t !== 'bed') banner(`${P.items.filter(i => i.type === t).length} added · tap more`, 'Done');
     return;
   }
+  if (planTabNow === 'layers') { whatsHere(lat, lng); return; }
   if (selId) { selId = null; renderItems(); renderSel(); }
 });
 
@@ -2353,7 +2443,7 @@ function renderItems() {
     const color = it.type === 'bed' ? '#ff5fa2' : it.type === 'tree' ? '#62d17a' : '#7cc7ff';
     const style = { color: on ? '#ffffff' : color, weight: on ? 3 : 2, fillColor: color, fillOpacity: it.type === 'bed' ? 0.35 : 0.22, bubblingMouseEvents: false };
     const lay = it.type === 'tree' ? L.circle(F.toLL(it.x, it.y), { ...style, radius: it.r / FT_PER_M }) : L.polygon(itemShape(it), style);
-    lay.on('click', () => { if (placing) return; selId = it.id; renderItems(); renderSel(); });
+    lay.on('click', () => { if (placing) return; selId = it.id; if (mode === 'plan' && planTabNow !== 'garden') planTab('garden'); renderItems(); renderSel(); });
     lay.bindTooltip(it.name, { permanent: map.getZoom() >= 19, direction: 'center', className: 'lbl', interactive: false });
     lay.addTo(lyItems); itemLayers.set(it.id, lay);
     if (it.type === 'bed') drawRowsOnMap(it, lyItems);
@@ -2589,10 +2679,10 @@ $('date').oninput = () => { P.doy = +$('date').value; renderShade(); recomputeDa
 $('date').onchange = () => saveProject();
 $('time').oninput = () => { P.minutes = +$('time').value; renderShade(); };
 $('time').onchange = () => saveProject();
-$('lyHeat').onchange = () => { P.layers.heat = $('lyHeat').checked; renderHeat(); saveProject(); };
-$('lyShade').onchange = () => { P.layers.shade = $('lyShade').checked; renderShade(); saveProject(); };
-$('lyCont').onchange = () => { P.layers.cont = $('lyCont').checked; renderContours(); saveProject(); };
-$('lyParcels').onchange = () => { P.layers.parcels = $('lyParcels').checked; applyParcelLayer(); saveProject(); };
+$('lyHeat').onchange = () => { P.layers.heat = $('lyHeat').checked; renderHeat(); saveProject(); applyOverlays(); };
+$('lyShade').onchange = () => { P.layers.shade = $('lyShade').checked; renderShade(); saveProject(); applyOverlays(); };
+$('lyCont').onchange = () => { P.layers.cont = $('lyCont').checked; renderContours(); saveProject(); applyOverlays(); };
+$('lyParcels').onchange = () => { P.layers.parcels = $('lyParcels').checked; applyParcelLayer(); saveProject(); applyOverlays(); };
 function applyParcelLayer() { if (P && !P.layers.parcels) parcelLines.remove(); else if (!parcelLines._map) parcelLines.addTo(map); drawNeighbors(); }
 
 
@@ -3173,6 +3263,223 @@ function renderThisWeek() {
   el.textContent = wk.length ? `This week: ${wk.slice(0, 2).map(e => `${e.label.toLowerCase()} ${e.text.split(':')[0]}`).join('; ')}${wk.length > 2 ? ` and ${wk.length - 2} more` : ''}.`
     : up ? `Next up ${plDate(up.d)}: ${up.label.toLowerCase()} ${up.text.split(':')[0]}.` : 'Everything in the plan is done.';
 }
+
+
+/* ============================================================
+   Property dashboard: tabs, overview tiles, map layers, "what's here"
+   ============================================================ */
+const GIS = {
+  naipPlus: 'https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPPlus/ImageServer',
+  dem: 'https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer',
+  topo: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}',
+  fema: 'https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer',
+  nwi: 'https://fwspublicservices.wim.usgs.gov/wetlandsmapservice/rest/services/Wetlands/MapServer',
+  nhd: 'https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer',
+  soilTiles: 'https://mapsweb.lib.purdue.edu/arcgis/rest/services/Isee/USA_ALL_gS1024_Soil_Map_Units/MapServer/tile/{z}/{y}/{x}',
+  nlcd: 'https://geo.fas.usda.gov/arcgis2/rest/services/G_Land_Cover/NLCD/MapServer',
+  contours: 'https://carto.nationalmap.gov/arcgis/rest/services/contours/MapServer',
+  ncImg: name => `https://services.nconemap.gov/secure/rest/services/Imagery/${name}/ImageServer`
+};
+/* Map tiles drawn on demand by ArcGIS export / exportImage (images load without cross-site permission). */
+const ExportTiles = L.TileLayer.extend({
+  initialize(fn, opts) { this._fn = fn; L.TileLayer.prototype.initialize.call(this, '', opts); },
+  getTileUrl(c) { const W = 20037508.342789244, s = 2 * W / Math.pow(2, c.z), x0 = -W + c.x * s, y1 = W - c.y * s; return this._fn([x0, y1 - s, x0 + s, y1].map(v => v.toFixed(2)).join(',')); }
+});
+const mapExport = (base, layers) => bbox => `${base}/export?bbox=${bbox}&bboxSR=3857&imageSR=3857&size=256,256&dpi=96&format=png32&transparent=true${layers != null ? `&layers=show:${layers}` : ''}&f=image`;
+const imgExport = (base, rule, fmt = 'png') => bbox => `${base}/exportImage?bbox=${bbox}&bboxSR=3857&imageSR=3857&size=256,256&format=${fmt}&transparent=true${rule ? `&renderingRule=${encodeURIComponent(JSON.stringify({ rasterFunction: rule }))}` : ''}&f=image`;
+map.createPane('gis'); map.getPane('gis').style.zIndex = 250;
+
+const BASEMAPS = [
+  { id: 'aerial', name: 'Aerial', tip: 'Newest aerial photo' },
+  { id: 'naip', name: 'Farm', tip: 'USDA summer farm photo (NAIP)', make: () => new ExportTiles(imgExport(GIS.naipPlus, 'NaturalColor', 'jpgpng'), { maxZoom: 22, maxNativeZoom: 19, attribution: 'USDA NAIP via USGS' }) },
+  { id: 'topo', name: 'Topo', tip: 'USGS topographic map', make: () => L.tileLayer(GIS.topo, { maxZoom: 22, maxNativeZoom: 16, attribution: 'USGS Topo' }) },
+  { id: 'relief', name: 'Relief', tip: 'Shaded terrain', make: () => new ExportTiles(imgExport(GIS.dem, 'Hillshade Multidirectional'), { maxZoom: 22, maxNativeZoom: 18, attribution: 'USGS 3DEP' }) },
+  { id: 'past', name: 'Past', tip: 'Older aerial photos (North Carolina)', nc: true }
+];
+const NC_PAST = [['2020_2023', 'Orthoimagery_2020_2023', '2020–23'], ['2016_2019', 'Orthoimagery_2016_2019', '2016–19'], ['2012_2015', 'Orthoimagery_2012_2015', '2012–15'], ['2010', 'Orthoimagery_2010', '2010'], ['2008', 'Orthoimagery_2008', '2008'], ['2006', 'Orthoimagery_2006', '2006'], ['2004', 'Orthoimagery_2004', '2004'], ['2002', 'Orthoimagery_2002', '2002'], ['2000', 'Orthoimagery_2000', '2000'], ['1998', 'Orthoimagery_1998', '1998'], ['1995', 'Orthoimagery_1995', '1995'], ['1993', 'DOQQ_NC_1993', '1993']];
+const OVERLAYS = [
+  { id: 'flood', make: () => new ExportTiles(mapExport(GIS.fema, 28), { pane: 'gis', maxZoom: 22, attribution: 'FEMA NFHL' }) },
+  { id: 'wetland', make: () => new ExportTiles(mapExport(GIS.nwi, 0), { pane: 'gis', maxZoom: 22, minZoom: 11, attribution: 'USFWS National Wetlands Inventory' }) },
+  { id: 'water', make: () => new ExportTiles(mapExport(GIS.nhd), { pane: 'gis', maxZoom: 22, attribution: 'USGS NHD' }) },
+  { id: 'soil', make: () => L.tileLayer(GIS.soilTiles, { pane: 'gis', maxZoom: 22, maxNativeZoom: 15, minZoom: 12, attribution: 'USDA gSSURGO via Purdue' }) },
+  { id: 'landcover', make: () => new ExportTiles(mapExport(GIS.nlcd, 2), { pane: 'gis', maxZoom: 22, attribution: 'NLCD 2021 via USDA' }) },
+  { id: 'ndvi', make: () => new ExportTiles(imgExport(GIS.naipPlus, 'NDVI_Color'), { pane: 'gis', maxZoom: 22, maxNativeZoom: 19, attribution: 'USDA NAIP via USGS' }) },
+  { id: 'contours', make: () => new ExportTiles(mapExport(GIS.contours), { pane: 'gis', maxZoom: 22, minZoom: 13, attribution: 'USGS contours' }) },
+  { id: 'slope', make: () => new ExportTiles(imgExport(GIS.dem, 'Slope Map'), { pane: 'gis', maxZoom: 22, maxNativeZoom: 18, attribution: 'USGS 3DEP' }) },
+  { id: 'aspect', make: () => new ExportTiles(imgExport(GIS.dem, 'Aspect Map'), { pane: 'gis', maxZoom: 22, maxNativeZoom: 18, attribution: 'USGS 3DEP' }) }
+];
+const ovLayers = new Map();
+let baseExtra = null;
+
+function gisState() {
+  P.gis = P.gis || { base: 'aerial', past: '2016_2019', ov: {}, opacity: 0.6 };
+  return P.gis;
+}
+function applyBase() {
+  const g = gisState(), isNC = (P.parcel && P.parcel.state === 'NC') || inBox(STATE_BOX.NC, P.lat0, P.lng0);
+  if (baseExtra) { map.removeLayer(baseExtra); baseExtra = null; }
+  const aerialOn = g.base === 'aerial' || (g.base === 'past' && !isNC);
+  for (const l of [baseTiles, ncTiles]) { if (aerialOn && !map.hasLayer(l)) l.addTo(map); if (!aerialOn && map.hasLayer(l)) map.removeLayer(l); }
+  if (g.base === 'past' && isNC) {
+    const p = NC_PAST.find(x => x[0] === g.past) || NC_PAST[1];
+    baseExtra = new ExportTiles(imgExport(GIS.ncImg(p[1]), null, 'jpgpng'), { maxZoom: 22, maxNativeZoom: 20, attribution: `NC OneMap ${p[2]}` }).addTo(map);
+  } else if (!aerialOn) {
+    const b = BASEMAPS.find(x => x.id === g.base); if (b && b.make) baseExtra = b.make().addTo(map);
+  }
+  if (baseExtra) baseExtra.bringToBack();
+  [...$('baseSeg').children].forEach(x => x.classList.toggle('on', x.dataset.id === g.base));
+  $('pastSel').value = g.past; $('baseTip').textContent = (BASEMAPS.find(x => x.id === g.base) || {}).tip || '';
+  $('pastWrap').hidden = !(g.base === 'past');
+  $('pastNote').textContent = isNC ? '' : 'Past aerial photos are available in North Carolina. Elsewhere this shows today\'s aerial.';
+  $('pastSel').hidden = !isNC;
+}
+function applyOverlays() {
+  const g = gisState();
+  for (const o of OVERLAYS) {
+    const on = !!g.ov[o.id], cb = $('ov-' + o.id);
+    if (cb) cb.checked = on;
+    let lay = ovLayers.get(o.id);
+    if (on && !lay) { lay = o.make(); ovLayers.set(o.id, lay); }
+    if (lay) { lay.setOpacity(g.opacity); if (on && !map.hasLayer(lay)) lay.addTo(map); if (!on && map.hasLayer(lay)) map.removeLayer(lay); }
+  }
+  $('ovOpacity').value = Math.round(g.opacity * 100);
+  const n = OVERLAYS.filter(o => g.ov[o.id]).length + ['heat', 'shade', 'cont', 'parcels'].filter(k => P.layers[k]).length;
+  $('layerCount').textContent = n ? `${n} on` : '';
+}
+function clearGisLayers() {
+  for (const lay of ovLayers.values()) if (map.hasLayer(lay)) map.removeLayer(lay);
+  if (baseExtra) { map.removeLayer(baseExtra); baseExtra = null; }
+  for (const l of [baseTiles, ncTiles]) if (!map.hasLayer(l)) l.addTo(map);
+  hereMarker.remove(); $('here').hidden = true;
+}
+(function buildLayerControls() {
+  const seg = $('baseSeg');
+  for (const b of BASEMAPS) {
+    const x = document.createElement('button'); x.type = 'button'; x.dataset.id = b.id; x.textContent = b.name; x.title = b.tip;
+    x.onclick = () => { gisState().base = b.id; applyBase(); saveProject(); };
+    seg.appendChild(x);
+  }
+  const ps = $('pastSel');
+  for (const [k, , label] of NC_PAST) { const o = document.createElement('option'); o.value = k; o.textContent = label; ps.appendChild(o); }
+  ps.onchange = () => { gisState().past = ps.value; applyBase(); saveProject(); };
+  for (const o of OVERLAYS) { const cb = $('ov-' + o.id); if (cb) cb.onchange = () => { gisState().ov[o.id] = cb.checked; applyOverlays(); saveProject(); }; }
+  $('ovOpacity').oninput = () => { gisState().opacity = +$('ovOpacity').value / 100; applyOverlays(); };
+  $('ovOpacity').onchange = () => saveProject();
+  $('ovClear').onclick = () => { gisState().ov = {}; applyOverlays(); saveProject(); };
+})();
+
+/* ----- tabs ----- */
+let planTabNow = 'overview';
+function planTab(t) {
+  planTabNow = t;
+  for (const x of $('planTabs').children) { const on = x.dataset.tab === t; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); }
+  for (const id of ['overview', 'layers', 'sun', 'garden']) $('tp-' + id).hidden = id !== t;
+  if (P) P.tab = t;
+  if (t !== 'layers') { hereMarker.remove(); $('here').hidden = true; }
+  if (t === 'overview' && P) renderDash();
+  $('sheet').querySelector('.body').scrollTop = 0;
+}
+for (const x of $('planTabs').children) x.onclick = () => { planTab(x.dataset.tab); $('sheet').classList.remove('min'); };
+
+/* ----- overview tiles ----- */
+let dashLoading = null;
+function ensureDashData() {
+  const p = P; if (!p || dashLoading === p.id) return;
+  dashLoading = p.id;
+  const done = () => { if (p === P && mode === 'plan' && planTabNow === 'overview') renderDash(); };
+  const jobs = [];
+  if (!p.climate) jobs.push(loadClimate(p.lat0, p.lng0).then(c => { if (c) { p.climate = c; saveProject(); } }).catch(() => { p._climateFail = 1; }).finally(done));
+  if (!p.soils) jobs.push(loadSoils(p.boundary).then(s => { p.soils = s; saveProject(); }).catch(() => { p._soilFail = 1; }).finally(done));
+  if (!p.flood) jobs.push(loadFlood(p.boundary).then(f => { p.flood = f; saveProject(); }).catch(() => { p._floodFail = 1; }).finally(done));
+  if (!p.facts && p.parcel) jobs.push(parcelAt(p.lat0, p.lng0).then(h => { p.facts = h ? factsOf(h) : {}; if (h && !p.parcelLayer) p.parcelLayer = h.layer; saveProject(); }).catch(() => {}).finally(done));
+  Promise.allSettled(jobs).then(() => { if (dashLoading === p.id) dashLoading = null; });
+}
+function terrainStats() {
+  const T = P.terrain; if (!T) return null;
+  let n = 0, sum = 0, gx = 0, gy = 0, lo = Infinity, hi = -Infinity;
+  for (let j = 0; j < T.n; j++) for (let i = 0; i < T.n; i++) {
+    const x = T.x0 + i * T.dx, y = T.y0 + j * T.dy;
+    if (!inPoly(x, y, bXY)) continue;
+    const z = T.z[j * T.n + i], s = slopeAt(T, x, y);
+    n++; sum += s.pct; gx += s.gx; gy += s.gy; if (z < lo) lo = z; if (z > hi) hi = z;
+  }
+  if (!n) return null;
+  const az = (Math.atan2(-gx, -gy) / RAD + 360) % 360; // downhill direction
+  const names = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
+  return { slope: sum / n, lo, hi, faces: Math.hypot(gx, gy) / n < 0.005 ? null : names[Math.round(az / 45) % 8] };
+}
+function tile(box, { label, value, sub, state = '', onclick, wide }) {
+  const t = document.createElement(onclick ? 'button' : 'div');
+  t.className = 'tile' + (wide ? ' wide' : '') + (onclick ? ' tap' : '');
+  if (onclick) { t.type = 'button'; t.onclick = onclick; }
+  t.innerHTML = '<small><i class="dot"></i><span></span></small><b></b><p></p>';
+  if (state) t.querySelector('.dot').classList.add(state); else t.querySelector('.dot').remove();
+  t.querySelector('span').textContent = label; t.querySelector('b').textContent = value; t.querySelector('p').textContent = sub || '';
+  box.appendChild(t);
+}
+function renderDash() {
+  if (!P) return;
+  ensureDashData();
+  const box = $('dash'); box.textContent = '';
+  const acres = polyArea(bXY) / 43560, report = () => openReport();
+  tile(box, { label: 'Land', value: `${fmtAcres(acres, true)} ac`, sub: P.parcel ? `Parcel ${P.parcel.id}` : 'Your boundary' });
+  const b = sunBands(getSeasonGrid()), six = b[0].share + b[1].share;
+  tile(box, { label: 'Sun, Apr–Sep', value: `${pct(six)} full sun`, sub: P.items.some(i => i.type !== 'bed') ? `${fmtAcres(b[0].acres + b[1].acres, true)} ac get 6+ hours` : 'Add trees and buildings for real shade', state: six >= 0.5 ? 'ok' : six >= 0.2 ? 'warn' : 'bad', onclick: () => planTab('sun') });
+  const c = P.climate;
+  tile(box, c ? { label: 'Growing season', value: `Zone ${c.zone}`, sub: `Frost-free ${fmtMD(c.lastFrost)} – ${fmtMD(c.firstFrost)}`, onclick: report } : { label: 'Growing season', value: P._climateFail ? 'Unavailable' : 'Loading…', sub: 'NOAA 30-year records' });
+  const s = P.soils;
+  if (s && s.length) {
+    const tot = s.reduce((a, x) => a + x.acres, 0), prime = s.filter(x => /^all areas are prime|^prime farmland/i.test(x.farm || '')).reduce((a, x) => a + x.acres, 0), top = s[0];
+    tile(box, { label: 'Soil', value: titleCase(simpleSoil(top.name)), sub: [top.drain, top.ph != null ? `pH ${top.ph.toFixed(1)}` : null, prime / tot >= 0.05 ? `${pct(prime / tot)} prime` : null].filter(Boolean).join(' · '), state: /well/i.test(top.drain || '') ? 'ok' : 'warn', onclick: report });
+  } else tile(box, { label: 'Soil', value: s ? 'No survey' : P._soilFail ? 'Unavailable' : 'Loading…', sub: 'USDA soil survey' });
+  const f = P.flood;
+  tile(box, f ? { label: 'Flood', value: !f.mapped ? 'Not mapped' : f.sfha > 0 ? `${pct(f.sfha)} floodplain` : f.five > 0 ? '500-yr area' : 'No flood zone', sub: f.mapped ? `FEMA zones ${f.zones.join(', ')}` : 'No FEMA map here', state: !f.mapped ? 'warn' : f.sfha > 0 ? 'bad' : f.five > 0 ? 'warn' : 'ok', onclick: () => { gisState().ov.flood = true; applyOverlays(); planTab('layers'); } } : { label: 'Flood', value: P._floodFail ? 'Unavailable' : 'Loading…', sub: 'FEMA flood maps' });
+  const ts = terrainStats();
+  tile(box, ts ? { label: 'Terrain', value: `${ts.slope.toFixed(1)}% avg slope`, sub: `${Math.round(ts.lo)}–${Math.round(ts.hi)} ft${ts.faces ? ` · faces ${ts.faces}` : ' · nearly flat'}`, state: ts.slope < 5 ? 'ok' : ts.slope < 10 ? 'warn' : 'bad', onclick: () => { gisState().ov.slope = true; applyOverlays(); planTab('layers'); } } : { label: 'Terrain', value: 'Loading…', sub: 'USGS elevation' });
+  const fx = P.facts;
+  if (fx && fx.value) tile(box, { label: 'Tax value', value: `$${Math.round(fx.value / 1000).toLocaleString()}k`, sub: [fx.built ? `Built ${fx.built}` : null, fx.sale ? `Sold ${fx.sale}` : null].filter(Boolean).join(' · ') || 'County records', onclick: report });
+  else tile(box, { label: 'County records', value: fx ? 'Not published' : P.parcel ? 'Loading…' : 'No parcel', sub: P.parcel && P.parcel.source ? P.parcel.source : 'Own boundary' });
+  const beds = P.items.filter(i => i.type === 'bed'), np = beds.reduce((a, x) => a + (x.plantings || []).length, 0);
+  const ev = plEvents(), now = mondayOf(plToday()), up = ev.find(e => e.d >= now);
+  tile(box, { label: 'Garden', value: beds.length ? `${beds.length} bed${beds.length === 1 ? '' : 's'} · ${np} crop${np === 1 ? '' : 's'}` : 'No beds yet', sub: up ? `Next: ${up.label.toLowerCase()} ${up.text.split(':')[0]}, ${plDate(up.d)}` : 'Tap to add beds', onclick: () => planTab(beds.length ? 'garden' : 'sun') });
+}
+
+/* ----- what's here ----- */
+const hereMarker = L.circleMarker([0, 0], { radius: 8, color: '#fff', weight: 3, fillColor: '#e8a317', fillOpacity: 1, interactive: false });
+const NLCD_CLASSES = { 11: 'Open water', 12: 'Ice/snow', 21: 'Developed, open space', 22: 'Developed, low', 23: 'Developed, medium', 24: 'Developed, high', 31: 'Barren', 41: 'Deciduous forest', 42: 'Evergreen forest', 43: 'Mixed forest', 52: 'Shrub/scrub', 71: 'Grassland', 81: 'Pasture/hay', 82: 'Cultivated crops', 90: 'Woody wetlands', 95: 'Herbaceous wetlands' };
+let hereSeq = 0;
+function identifyParams(lat, lng, layers, tol = 2) {
+  const d = 0.002;
+  return new URLSearchParams({ geometry: `${lng},${lat}`, geometryType: 'esriGeometryPoint', sr: '4326', layers, tolerance: String(tol), mapExtent: [lng - d, lat - d, lng + d, lat + d].join(','), imageDisplay: '400,400,96', returnGeometry: 'false', f: 'json' });
+}
+async function whatsHere(lat, lng) {
+  const seq = ++hereSeq, card = $('here'), list = $('hereList');
+  hereMarker.setLatLng([lat, lng]).addTo(map);
+  card.hidden = false; list.textContent = '';
+  $('hereWhere').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  const row = label => { const r = document.createElement('div'); r.className = 'hrow'; r.innerHTML = '<small></small><b>…</b>'; r.firstChild.textContent = label; list.appendChild(r); return v => { if (seq === hereSeq) { r.lastChild.textContent = v; r.classList.toggle('dim', /^(Unavailable|None|–)/.test(v)); } }; };
+  const [x, y] = F.toXY(lat, lng), inside = inPoly(x, y, bXY);
+  const setSun = row('Sun, Apr–Sep');
+  const g = getSeasonGrid(), h = inside ? gridAt(g, x, y) : null;
+  setSun(h != null ? `${fmtH(h)} a day · ${sunVerdict(h)[1].toLowerCase()}` : 'Outside the property');
+  const setElev = row('Elevation'), setSlope = row('Slope');
+  if (P.terrain && inside) { const s = slopeAt(P.terrain, x, y); setSlope(`${s.pct.toFixed(1)}% · ${slopeWord(s.pct).toLowerCase()}`); } else setSlope('–');
+  getJSON(SVC.elevation, { method: 'POST', body: new URLSearchParams({ geometry: JSON.stringify({ points: [[lng, lat]], spatialReference: { wkid: 4326 } }), geometryType: 'esriGeometryMultipoint', returnFirstValueOnly: 'true', f: 'json' }) }, 10000)
+    .then(j => { const v = parseFloat(j.samples && j.samples[0] && j.samples[0].value); setElev(isFinite(v) ? `${Math.round(v * FT_PER_M).toLocaleString()} ft` : 'Unavailable'); }).catch(() => setElev('Unavailable'));
+  const setSoil = row('Soil');
+  getJSON(SVC.sda, { method: 'POST', body: new URLSearchParams({ format: 'JSON', query: `SELECT TOP 1 m.muname, a.drclassdcd, m.farmlndcl FROM mapunit m LEFT JOIN muaggatt a ON a.mukey = m.mukey WHERE m.mukey IN (SELECT * FROM SDA_Get_Mukey_from_intersection_with_WktWgs84('point(${lng.toFixed(6)} ${lat.toFixed(6)})'))` }) }, 15000)
+    .then(j => { const r = j.Table && j.Table[0]; setSoil(r ? [r[0], r[1]].filter(Boolean).join(' · ') : 'None mapped'); }).catch(() => setSoil('Unavailable'));
+  const setFlood = row('Flood zone');
+  arcQuery(SVC.fema, { ...pointParams(lat, lng), outFields: 'FLD_ZONE,ZONE_SUBTY,SFHA_TF', returnGeometry: 'false' }, 12000)
+    .then(fs => { const a = fs[0] && fs[0].properties; setFlood(!a ? 'Not mapped' : a.SFHA_TF === 'T' ? `${a.FLD_ZONE} · 100-year floodplain` : /0\.2/.test(a.ZONE_SUBTY || '') ? `${a.FLD_ZONE} · 500-year area` : `${a.FLD_ZONE} · minimal hazard`); }).catch(() => setFlood('Unavailable'));
+  const setWet = row('Wetland');
+  getJSON(`${GIS.nwi}/identify?${identifyParams(lat, lng, 'all:0', 1)}`, {}, 12000)
+    .then(j => { const a = j.results && j.results[0] && j.results[0].attributes; setWet(a ? `${a.WETLAND_TYPE || 'Wetland'} (${a.ATTRIBUTE || ''})` : 'None mapped'); }).catch(() => setWet('Unavailable'));
+  const setCover = row('Land cover (2021)');
+  getJSON(`${GIS.nlcd}/identify?${identifyParams(lat, lng, 'all:2', 0)}`, {}, 12000)
+    .then(j => { const a = j.results && j.results[0] && j.results[0].attributes; const v = a && parseInt(a['Pixel Value'] ?? a.Value ?? a.VALUE, 10); setCover(v ? NLCD_CLASSES[v] || `Class ${v}` : 'Unavailable'); }).catch(() => setCover('Unavailable'));
+}
+$('hereClose').onclick = () => { hereMarker.remove(); $('here').hidden = true; hereSeq++; };
 
 /* ---------- printable plan ---------- */
 $('btnPrint').onclick = () => { buildPrint(); window.print(); };
