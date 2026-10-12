@@ -844,6 +844,31 @@ input[type=range]{width:100%;accent-color:var(--sun);height:28px}
 .suggest button{text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:11px 12px;font:500 .92rem var(--f-body);color:var(--ink);cursor:pointer}
 .suggest button:last-child{border-bottom:0}
 .suggest button:hover,.suggest button:focus-visible{background:var(--paper)}
+/* your places: select, star, copy, delete */
+.savedhead{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px}
+.savedbtns{display:flex;gap:2px}
+.savedhead .btn{min-height:32px;padding:4px 8px;font-size:.85rem}
+.savedhead #btnSelect.on{color:var(--ink)}
+.places button{position:relative;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:manipulation;transition:background .12s,border-color .12s}
+.places button b .star{color:var(--sun);margin-right:4px}
+.places.selecting button{padding-left:46px}
+.places.selecting button::before{content:"";position:absolute;left:14px;top:50%;width:20px;height:20px;margin-top:-10px;border-radius:50%;border:2px solid var(--line);background:var(--paper)}
+.places.selecting button.picked{border-color:var(--sun);background:color-mix(in srgb,var(--sun) 14%,var(--paper-2))}
+.places.selecting button.picked::before{border-color:var(--sun);background:var(--sun) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='%231f3326' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/14px no-repeat}
+.places button.pressing{background:color-mix(in srgb,var(--sun) 10%,var(--paper-2))}
+.selbar{position:sticky;bottom:0;z-index:2;display:grid;gap:6px;margin:4px -4px 0;padding:10px 4px calc(6px + env(safe-area-inset-bottom,0px));background:var(--paper);border-top:1px solid var(--line)}
+.selcount{font-weight:600;font-size:.88rem;padding-left:4px}
+.selacts{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.selacts button{display:grid;justify-items:center;gap:3px;background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:8px 2px;color:var(--ink);font:600 .7rem/1.1 var(--f-body);cursor:pointer;min-height:52px}
+.selacts button:disabled{opacity:.4;cursor:default}
+.selacts svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.selacts #selStar.on svg{fill:var(--sun);stroke:var(--sun)}
+.selacts .del{color:var(--bad)}
+.undo{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--paper-2);border-radius:10px;padding:4px 4px 4px 12px;color:var(--ink)}
+.undo .btn{min-height:36px;color:var(--ink);text-decoration:underline;text-decoration-color:var(--sun);text-underline-offset:3px}
+#renameInput{width:100%;font:500 1rem var(--f-body);color:var(--ink);background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:11px 12px;min-height:46px}
+.savedlabel{background:var(--pine);color:#f3f0e2;border:0;border-radius:6px;font:600 .75rem var(--f-body);padding:3px 7px;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.savedlabel::before{display:none}
 /* backup, report */
 .backup{display:grid;gap:8px;border-top:1px solid var(--line);padding-top:14px;margin-top:4px}
 .footlinks a{color:var(--muted);text-decoration-color:var(--sun);text-underline-offset:3px}
@@ -1007,6 +1032,14 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
   </div>
 </div>
 
+<div class="modal" id="renameSheet" hidden role="dialog" aria-modal="true" aria-labelledby="renameTitle">
+  <form class="mcard" id="renameForm">
+    <h2 id="renameTitle">Rename place</h2>
+    <input type="text" id="renameInput" maxlength="80" aria-label="Place name" autocomplete="off">
+    <div class="row grow"><button class="btn" type="button" id="renameCancel">Cancel</button><button class="btn primary" type="submit">Save</button></div>
+  </form>
+</div>
+
 <div class="modal" id="reportSheet" hidden role="dialog" aria-modal="true" aria-labelledby="reportTitle">
   <form class="mcard" id="reportForm">
     <h2 id="reportTitle">Report a problem</h2>
@@ -1047,8 +1080,24 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
       <p class="status" id="findStatus">Or zoom in on the map and tap your property.</p>
       <div class="list" id="results"></div>
       <div class="view" id="savedWrap" hidden>
-        <span class="eyebrow">Your places</span>
-        <div class="list" id="saved"></div>
+        <div class="savedhead">
+          <span class="eyebrow" id="savedTitle">Your places</span>
+          <span class="savedbtns"><button class="btn ghost" id="btnSelAll" type="button" hidden>Select all</button><button class="btn ghost" id="btnSelect" type="button">Select</button></span>
+        </div>
+        <p class="note" id="savedHint">Press and hold a place to select it.</p>
+        <div class="list places" id="saved"></div>
+        <p class="status undo" id="savedStatus" role="status" hidden><span id="savedMsg"></span><button class="btn ghost" id="btnUndo" type="button">Undo</button></p>
+        <div class="selbar" id="selBar" hidden>
+          <span class="selcount" id="selCount"></span>
+          <div class="selacts">
+            <button type="button" id="selStar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg><span>Star</span></button>
+            <button type="button" id="selRename"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg><span>Rename</span></button>
+            <button type="button" id="selCopy"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/></svg><span>Copy</span></button>
+            <button type="button" id="selMap"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14"/></svg><span>Map</span></button>
+            <button type="button" id="selBackup"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 19h14"/></svg><span>Back up</span></button>
+            <button type="button" id="selDelete" class="del"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg><span>Delete</span></button>
+          </div>
+        </div>
       </div>
       <div class="backup">
         <span class="eyebrow">Backup</span>
@@ -1866,7 +1915,7 @@ let DB = store.load(), saveTimer = 0;
 function saveProject() {
   if (!P) return;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { DB.projects[P.id] = P; DB.order = [P.id, ...DB.order.filter(i => i !== P.id)].slice(0, 40); store.save(DB); }, 300);
+  saveTimer = setTimeout(() => { DB.projects[P.id] = P; DB.order = [P.id, ...DB.order.filter(i => i !== P.id)]; store.save(DB); }, 300);
 }
 
 const inBox = (b, lat, lng) => lng >= b[0] && lng <= b[2] && lat >= b[1] && lat <= b[3];
@@ -2245,7 +2294,7 @@ function show(view) {
   $('sheet').querySelector('.body').scrollTop = 0;
   $('sheet').classList.toggle('tall', view === 'rows' || view === 'todo' || view === 'check');
   if (view === 'plan' && P) renderThisWeek();
-  if (view === 'find') renderSaved();
+  if (view === 'find') renderSaved(); else { lySaved.clearLayers(); if (selecting) stopSelect(); }
   if (view === 'plan') markSeason();
 }
 $('grab').onclick = () => $('sheet').classList.toggle('min');
@@ -2257,7 +2306,7 @@ $('bannerBtn').onclick = () => {
 $('coverage').textContent = `Property lines load from statewide maps in ${STATE_SOURCES.length - 1} states and DC, and from county maps found automatically everywhere else. Where no county map is public, you tap the corners of your land.`;
 
 /* ---------- backup and restore ---------- */
-const APP_VERSION = 'sunplot-v15', BACKUP_KEY = 'sunplot.lastBackup';
+const APP_VERSION = 'sunplot-v16', BACKUP_KEY = 'sunplot.lastBackup';
 function backupNote(n) {
   let last = 0; try { last = +localStorage.getItem(BACKUP_KEY) || 0; } catch {}
   $('btnBackup').hidden = !n;
@@ -2266,17 +2315,19 @@ function backupNote(n) {
     : 'New phone? Restore a backup file to bring your places back.';
 }
 function backupStatus(text, err) { const b = $('backupStatus'); b.hidden = !text; b.textContent = text || ''; b.classList.toggle('err', !!err); }
-$('btnBackup').onclick = () => {
-  const ids = DB.order.filter(i => DB.projects[i]);
+$('btnBackup').onclick = () => backupIds(DB.order.filter(i => DB.projects[i]), true);
+function backupIds(ids, all) {
   const data = { app: 'Sunplot', kind: 'backup', format: 1, saved: new Date().toISOString(), order: ids, projects: Object.fromEntries(ids.map(i => [i, DB.projects[i]])) };
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const a = document.createElement('a'), url = URL.createObjectURL(blob);
-  a.href = url; a.download = `sunplot-backup-${new Date().toLocaleDateString('en-CA')}.json`; document.body.appendChild(a); a.click(); a.remove();
+  a.href = url; a.download = `sunplot-${all ? 'backup' : ids.length === 1 ? slug(DB.projects[ids[0]].name) : ids.length + '-places'}-${new Date().toLocaleDateString('en-CA')}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
-  try { localStorage.setItem(BACKUP_KEY, String(Date.now())); } catch {}
-  backupNote(ids.length);
-  backupStatus(`Saved ${a.download} to your Downloads. Keep a copy somewhere safe, like Google Drive or email.`);
-};
+  if (all) { try { localStorage.setItem(BACKUP_KEY, String(Date.now())); } catch {} }
+  backupNote(DB.order.filter(i => DB.projects[i]).length);
+  backupStatus(`Saved ${a.download} to your Downloads${all ? '' : ` (${ids.length === 1 ? '1 place' : ids.length + ' places'})`}. Keep a copy somewhere safe, like Google Drive or email.`);
+}
+function slug(t) { return String(t || 'place').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'place'; }
 $('btnRestore').onclick = () => { $('restoreFile').value = ''; $('restoreFile').click(); };
 function validProject(p) {
   return p && typeof p === 'object' && typeof p.id === 'string' && Array.isArray(p.boundary) && p.boundary.length >= 3 &&
@@ -2340,7 +2391,12 @@ $('btnReportFind').onclick = openProblemReport;
 $('btnReportPlan').onclick = openProblemReport;
 $('reportCancel').onclick = () => { $('reportSheet').hidden = true; };
 $('reportSheet').onclick = e => { if (e.target === $('reportSheet')) $('reportSheet').hidden = true; };
-addEventListener('keydown', e => { if (e.key === 'Escape' && !$('reportSheet').hidden) $('reportSheet').hidden = true; });
+addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (!$('reportSheet').hidden) $('reportSheet').hidden = true;
+  else if (!$('renameSheet').hidden) $('renameSheet').hidden = true;
+  else if (selecting) stopSelect();
+});
 $('reportForm').onsubmit = e => {
   e.preventDefault();
   const kind = $('reportKind').value, more = $('reportText').value.trim();
@@ -2352,16 +2408,150 @@ $('reportForm').onsubmit = e => {
 };
 
 /* ---------- find ---------- */
-function renderSaved() {
+/* ---------- your places: press and hold to select; star, rename, copy, map, back up, delete ---------- */
+let selecting = false;
+const picked = new Set();
+const lySaved = L.featureGroup().addTo(map);
+function placeIds() {
   const ids = DB.order.filter(i => DB.projects[i]);
+  return [...ids.filter(i => DB.projects[i].star), ...ids.filter(i => !DB.projects[i].star)];
+}
+function renderSaved() {
+  const ids = placeIds();
   $('savedWrap').hidden = !ids.length;
   backupNote(ids.length);
+  for (const i of [...picked]) if (!DB.projects[i]) picked.delete(i);
+  if (!ids.length) selecting = false;
   const box = $('saved'); box.textContent = '';
   for (const id of ids) {
-    const p = DB.projects[id];
-    box.appendChild(listButton(p.name, `${p.sub} · ${p.items.length} item${p.items.length === 1 ? '' : 's'}`, () => openProject(p)));
+    const p = DB.projects[id], n = p.items.length;
+    const b = listButton(p.name, `${p.sub} · ${n} item${n === 1 ? '' : 's'}`, () => {});
+    if (p.star) { const st = document.createElement('span'); st.className = 'star'; st.textContent = '★'; st.setAttribute('aria-label', 'Starred'); b.firstChild.prepend(st); }
+    b.dataset.id = id;
+    pressable(b, id);
+    box.appendChild(b);
   }
+  let used = false; try { used = !!localStorage.getItem('sunplot.selUsed'); } catch {}
+  $('savedHint').hidden = used || selecting;
+  updateSel();
 }
+/** Tap opens; press and hold (or right-click) starts selecting. */
+function pressable(b, id) {
+  let t = 0, sx = 0, sy = 0, long = false;
+  const cancel = () => { clearTimeout(t); b.classList.remove('pressing'); };
+  b.addEventListener('pointerdown', e => {
+    if (e.button > 0) return;
+    long = false; sx = e.clientX; sy = e.clientY; clearTimeout(t);
+    if (!selecting) b.classList.add('pressing');
+    t = setTimeout(() => { long = true; b.classList.remove('pressing'); if (navigator.vibrate) navigator.vibrate(15); startSelect(id); }, 450);
+  });
+  b.addEventListener('pointermove', e => { if (Math.hypot(e.clientX - sx, e.clientY - sy) > 10) cancel(); });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, cancel);
+  b.addEventListener('contextmenu', e => { e.preventDefault(); if (!long) startSelect(id); long = true; });
+  b.onclick = () => {
+    if (long) { long = false; return; }
+    if (selecting) { picked.has(id) ? picked.delete(id) : picked.add(id); if (!picked.size) stopSelect(); else updateSel(); return; }
+    const p = DB.projects[id]; if (p) openProject(p);
+  };
+}
+function startSelect(id) {
+  selecting = true; if (id) picked.add(id);
+  try { localStorage.setItem('sunplot.selUsed', '1'); } catch {}
+  updateSel();
+}
+function stopSelect() { selecting = false; picked.clear(); updateSel(); }
+function updateSel() {
+  const n = picked.size, total = placeIds().length;
+  $('saved').classList.toggle('selecting', selecting);
+  for (const b of $('saved').children) { b.classList.toggle('picked', picked.has(b.dataset.id)); b.setAttribute('aria-pressed', selecting ? String(picked.has(b.dataset.id)) : 'false'); }
+  $('selBar').hidden = !selecting;
+  $('savedHint').hidden = selecting || $('savedHint').hidden;
+  $('btnSelect').textContent = selecting ? 'Done' : 'Select';
+  $('btnSelect').classList.toggle('on', selecting);
+  $('btnSelAll').hidden = !selecting || total < 2;
+  $('btnSelAll').textContent = n === total ? 'Select none' : 'Select all';
+  $('savedTitle').textContent = selecting ? 'Select places' : 'Your places';
+  $('selCount').textContent = n ? `${n} selected` : 'Tap places to select them';
+  const allStar = n > 0 && [...picked].every(i => DB.projects[i] && DB.projects[i].star);
+  $('selStar').classList.toggle('on', allStar); $('selStar').lastChild.textContent = allStar ? 'Unstar' : 'Star';
+  for (const k of ['selStar', 'selCopy', 'selMap', 'selBackup', 'selDelete']) $(k).disabled = !n;
+  $('selRename').disabled = n !== 1;
+}
+$('btnSelect').onclick = () => selecting ? stopSelect() : startSelect();
+$('btnSelAll').onclick = () => { const ids = placeIds(); if (picked.size === ids.length) picked.clear(); else ids.forEach(i => picked.add(i)); updateSel(); };
+function savedStatus(msg, undo) {
+  clearTimeout(savedStatus.t);
+  $('savedStatus').hidden = !msg; $('savedMsg').textContent = msg || '';
+  $('btnUndo').hidden = !undo; $('btnUndo').onclick = undo ? () => { undo(); savedStatus(null); } : null;
+  if (msg) savedStatus.t = setTimeout(() => savedStatus(null), undo ? 10000 : 5000);
+}
+function commit(before) {
+  if (store.save(DB)) return true;
+  DB = before; savedStatus("There isn't enough room on this phone for that. Delete a place or two and try again.");
+  return false;
+}
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+$('selStar').onclick = () => {
+  const on = !$('selStar').classList.contains('on');
+  for (const i of picked) if (DB.projects[i]) DB.projects[i].star = on || undefined;
+  store.save(DB); renderSaved();
+};
+$('selDelete').onclick = () => {
+  const ids = [...picked], before = structuredClone(DB);
+  for (const i of ids) delete DB.projects[i];
+  DB.order = DB.order.filter(i => !ids.includes(i));
+  store.save(DB); lySaved.clearLayers(); stopSelect(); renderSaved();
+  savedStatus(`Deleted ${plural(ids.length, 'place')}.`, () => { DB = before; store.save(DB); renderSaved(); });
+};
+$('selCopy').onclick = () => {
+  const before = structuredClone(DB), made = [];
+  for (const i of placeIds().filter(i => picked.has(i))) {
+    const c = structuredClone(DB.projects[i]);
+    c.id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    c.name = copyName(c.name); c.created = Date.now(); delete c.star;
+    DB.projects[c.id] = c; made.push(c.id);
+    const at = DB.order.indexOf(i); DB.order.splice(at + 1, 0, c.id);
+  }
+  if (!commit(before)) return renderSaved();
+  picked.clear(); made.forEach(i => picked.add(i)); renderSaved();
+  savedStatus(`Made ${made.length === 1 ? 'a copy' : made.length + ' copies'}. Copies start with the same beds, trees and crops.`, () => { DB = before; store.save(DB); picked.clear(); stopSelect(); renderSaved(); });
+};
+function copyName(name) {
+  const base = String(name).replace(/ \(copy(?: \d+)?\)$/, ''), names = new Set(Object.values(DB.projects).map(p => p.name));
+  let n = `${base} (copy)`, k = 2;
+  while (names.has(n)) n = `${base} (copy ${k++})`;
+  return n;
+}
+$('selRename').onclick = () => {
+  const id = [...picked][0], p = DB.projects[id]; if (!p) return;
+  $('renameInput').value = p.name; $('renameSheet').hidden = false; $('renameInput').focus(); $('renameInput').select();
+  $('renameForm').onsubmit = e => {
+    e.preventDefault();
+    const v = $('renameInput').value.trim(); if (v) { p.name = v.slice(0, 80); store.save(DB); renderSaved(); }
+    $('renameSheet').hidden = true;
+  };
+};
+$('renameCancel').onclick = () => { $('renameSheet').hidden = true; };
+$('renameSheet').onclick = e => { if (e.target === $('renameSheet')) $('renameSheet').hidden = true; };
+$('selBackup').onclick = () => {
+  const ids = placeIds().filter(i => picked.has(i));
+  backupIds(ids, ids.length === placeIds().length);
+};
+/** Outline the selected places on the map together, e.g. several parcels of one farm. Tap an outline to open it. */
+$('selMap').onclick = () => {
+  lySaved.clearLayers();
+  const ids = placeIds().filter(i => picked.has(i));
+  for (const i of ids) {
+    const p = DB.projects[i];
+    const poly = L.polygon(p.boundary, { color: '#e8a317', weight: 3, fillColor: '#e8a317', fillOpacity: 0.12, bubblingMouseEvents: false }).addTo(lySaved);
+    poly.bindTooltip(p.name, { permanent: ids.length <= 8, direction: 'center', className: 'savedlabel' });
+    poly.on('click', () => { stopSelect(); openProject(p); });
+  }
+  if (!ids.length) return;
+  const ring = ids.flatMap(i => DB.projects[i].boundary);
+  $('sheet').classList.add('min'); fitRing(ring);
+  savedStatus(`Showing ${plural(ids.length, 'place')} on the map. Tap an outline to open it.`);
+};
 function listButton(title, sub, go) {
   const b = document.createElement('button');
   b.innerHTML = '<b></b><span></span>'; b.firstChild.textContent = title; b.lastChild.textContent = sub; b.onclick = go;

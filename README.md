@@ -32,6 +32,10 @@ Open the web address. On iPhone: Share → Add to Home Screen. On Android: menu 
 - The app asks before using location, and every saved place can be deleted from its Overview tab.
 - **Terms of use:** `terms.html`. Fill in the publisher name and support email here too.
 
+## Your places
+
+On the first screen, press and hold a place (or tap **Select**) to pick one or more. Then **Star** (starred places stay at the top), **Rename**, **Copy** (same beds, trees and crops under a new name), **Map** (outlines all the picked places together; tap one to open it), **Back up** (a backup file of just those) or **Delete** (with Undo). Tap a place normally to open it.
+
 ## Backup and problem reports
 
 - **Backup:** the first screen has **Save a backup file** (downloads `sunplot-backup-DATE.json` with every saved place) and **Restore a backup** (adds the places back; places already on the phone are replaced after asking).
