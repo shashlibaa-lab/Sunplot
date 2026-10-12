@@ -709,6 +709,11 @@ body{background:var(--pine);color:var(--ink);font:15px/1.45 var(--f-body);overfl
 #map{position:fixed;inset:0;background:#222}
 .leaflet-container{font-family:var(--f-body)}
 .leaflet-control-attribution{font-size:10px}
+/* map rotation: attribution lives outside the (rotating) map */
+.attrbox{position:fixed;right:0;bottom:0;z-index:500;pointer-events:none}
+.attrbox .leaflet-control-attribution{pointer-events:auto;margin:0;background:rgba(255,255,255,.75);color:#333;font:10px/1.5 var(--f-body);padding:0 6px;border-radius:6px 0 0 0}
+.attrbox .leaflet-control-attribution a{color:#2a6b8a}
+.fab.north svg{width:26px;height:26px;transition:transform .05s linear}
 
 /* top bar */
 .top{position:fixed;left:0;right:0;top:0;z-index:600;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 0;display:flex;gap:8px;align-items:center;pointer-events:none}
@@ -1028,6 +1033,7 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
 <div class="top">
   <div class="brand"><i></i>Sunplot</div>
   <div class="sp"></div>
+  <button class="fab north" id="btnNorth" aria-label="Turn map back to north up" title="North up" hidden><svg viewBox="0 0 24 24" id="needle" aria-hidden="true"><path d="M12 2.5l4.2 9.5H7.8z" fill="#d64541"/><path d="M12 21.5L7.8 12h8.4z" fill="currentColor" opacity=".45"/><text x="12" y="10.4" text-anchor="middle" font-size="5.2" font-weight="700" fill="#fff" font-family="system-ui,sans-serif">N</text></svg></button>
   <button class="fab" id="btnLocate" aria-label="Go to my location" title="My location"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
   <button class="fab" id="btnFit" aria-label="Show whole property" title="Whole property" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
 </div>
@@ -2170,6 +2176,120 @@ async function loadTerrain(frame, bXY) {
 
 /* ---------- map ---------- */
 const map = L.map('map', { zoomControl: false, maxZoom: 22 }).setView([37.5, -84], 5);
+
+/* ---------- map rotation: twist with two fingers; the compass turns it back to north ----------
+   The map element is turned with CSS. While turned it is enlarged to the screen's diagonal so no
+   corners show, and touches, drags and labels are converted between screen and map directions. */
+const ROT = { deg: 0, big: false };
+const toRad = d => d * Math.PI / 180;
+/** Screen direction → map direction. */
+function unrot(dx, dy, deg = ROT.deg) { const r = toRad(deg), c = Math.cos(r), s = Math.sin(r); return [dx * c + dy * s, -dx * s + dy * c]; }
+/** Map direction → screen direction. */
+function rot(dx, dy, deg = ROT.deg) { return unrot(dx, dy, -deg); }
+(() => {
+  const mouse0 = L.Map.prototype.mouseEventToContainerPoint;
+  L.Map.prototype.mouseEventToContainerPoint = function (e) {
+    if (!ROT.deg || this !== map) return mouse0.call(this, e);
+    const el = this._container, r = el.getBoundingClientRect();
+    const [x, y] = unrot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2));
+    return L.point(x + el.offsetWidth / 2, y + el.offsetHeight / 2);
+  };
+  const drag0 = L.Draggable.prototype._updatePosition;
+  L.Draggable.prototype._updatePosition = function () {
+    if (ROT.deg && this._lastEvent && this._startPoint && this._startPos && map._container.contains(this._element)) {
+      const e = this._lastEvent, f = e.touches && e.touches.length === 1 ? e.touches[0] : e;
+      const [x, y] = unrot(f.clientX - this._startPoint.x, f.clientY - this._startPoint.y);
+      this._newPos = this._startPos.add(L.point(x, y));
+    }
+    return drag0.call(this);
+  };
+  // keep labels and marker text upright
+  const marker0 = L.Marker.prototype._setPos;
+  L.Marker.prototype._setPos = function (pos) { marker0.call(this, pos); if (this._map === map) upright(this._icon); };
+  const tip0 = L.Tooltip.prototype._setPosition;
+  L.Tooltip.prototype._setPosition = function (pos) { tip0.call(this, pos); if (this._map === map) upright(this._container); };
+})();
+function upright(el) {
+  if (!el) return;
+  const t = el.style.transform.replace(/\s*rotate\([^)]*\)/g, '');
+  el.style.transform = ROT.deg ? `${t} rotate(${-ROT.deg}deg)` : t;
+  el.style.transformOrigin = ROT.deg ? '50% 50%' : '';
+}
+function sizeMap(big) {
+  if (ROT.big === big && !big) return;
+  ROT.big = big;
+  const el = map._container;
+  if (big) {
+    const W = innerWidth, H = innerHeight, D = Math.ceil(Math.hypot(W, H)) + 2;
+    Object.assign(el.style, { inset: 'auto', left: Math.floor((W - D) / 2) + 'px', top: Math.floor((H - D) / 2) + 'px', width: D + 'px', height: D + 'px' });
+  } else Object.assign(el.style, { inset: '', left: '', top: '', width: '', height: '' });
+  map.invalidateSize({ animate: false });
+  if (map.touchZoom && map.touchZoom._centerPoint) map.touchZoom._centerPoint = map.getSize()._divideBy(2); // mid-pinch
+}
+addEventListener('resize', () => { if (ROT.big) sizeMap(true); });
+/** Turn the map. deg is clockwise from north-up. */
+function setBearing(deg, live) {
+  deg = ((deg % 360) + 540) % 360 - 180;
+  if (Math.abs(deg) < 0.05) deg = 0;
+  if (deg && !ROT.big) sizeMap(true);
+  ROT.deg = deg;
+  map._container.style.transform = deg ? `rotate(${deg}deg)` : '';
+  $('btnNorth').hidden = !deg;
+  $('needle').style.transform = deg ? `rotate(${deg}deg)` : '';
+  map.eachLayer(l => {
+    if (l._icon) upright(l._icon);
+    const t = l.getTooltip && l.getTooltip();
+    if (t && t._container && t._map) upright(t._container);
+  });
+  if (!deg && !live && ROT.big) sizeMap(false);
+}
+function saveBearing() { if (P && (P.bearing || 0) !== ROT.deg) { P.bearing = ROT.deg || undefined; saveProject(); } }
+$('btnNorth').onclick = () => {
+  const from = ROT.deg, t0 = performance.now(), ms = 280;
+  const step = now => {
+    const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+    if (k < 1) { setBearing(from * (1 - e), true); requestAnimationFrame(step); }
+    else { setBearing(0); saveBearing(); }
+  };
+  requestAnimationFrame(step);
+};
+(() => {
+  // two-finger twist (pinch zoom keeps working at the same time)
+  const el = map._container;
+  let a0 = null, b0 = 0, turning = false;
+  const ang = t => Math.atan2(t[1].clientY - t[0].clientY, t[1].clientX - t[0].clientX) * 180 / Math.PI;
+  const wrap = d => ((d + 540) % 360) - 180;
+  el.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) { a0 = ang(e.touches); b0 = ROT.deg; turning = false; }
+    else if (e.touches.length > 2) a0 = null;
+  }, { capture: true, passive: true });
+  el.addEventListener('touchmove', e => {
+    if (a0 == null || e.touches.length !== 2) return;
+    const d = wrap(ang(e.touches) - a0);
+    if (!turning) {
+      if (Math.abs(d) < 14) return;   // small twists while pinching don't turn the map
+      turning = true; a0 += d > 0 ? 14 : -14;
+    }
+    setBearing(b0 + wrap(ang(e.touches) - a0), true);
+  }, { capture: true, passive: true });
+  const end = e => {
+    if (a0 == null || e.touches.length >= 2) return;
+    a0 = null;
+    if (!turning) return;
+    turning = false;
+    if (Math.abs(ROT.deg) < 6) setBearing(0); else setBearing(ROT.deg);   // snap to north when close
+    saveBearing();
+  };
+  el.addEventListener('touchend', end, { capture: true, passive: true });
+  el.addEventListener('touchcancel', end, { capture: true, passive: true });
+  // computers: hold Shift and drag sideways to turn
+  let sx = null;
+  el.addEventListener('pointerdown', e => { if (e.shiftKey && e.pointerType === 'mouse') { sx = e.clientX; b0 = ROT.deg; map.dragging.disable(); } }, true);
+  addEventListener('pointermove', e => { if (sx != null) setBearing(b0 + (e.clientX - sx) * 0.4, true); });
+  addEventListener('pointerup', () => { if (sx == null) return; sx = null; map.dragging.enable(); setBearing(Math.abs(ROT.deg) < 3 ? 0 : ROT.deg); saveBearing(); });
+})();
+// the attribution has to stay put while the map turns
+{ const box = document.createElement('div'); box.className = 'attrbox'; document.body.appendChild(box); box.appendChild(map.attributionControl.getContainer()); }
 const baseTiles = L.tileLayer(SVC.usImagery, { maxNativeZoom: 16, maxZoom: 22, attribution: 'Imagery <a href="https://www.usgs.gov/" target="_blank" rel="noopener">USGS</a>' }).addTo(map);
 const ncTiles = L.tileLayer(SVC.ncImagery, { minZoom: 15, maxNativeZoom: 20, maxZoom: 22, errorTileUrl: BLANK, attribution: '<a href="https://www.nconemap.gov/" target="_blank" rel="noopener">NC OneMap</a>' }).addTo(map);
 const ParcelTiles = L.TileLayer.extend({
@@ -2364,7 +2484,7 @@ $('bannerBtn').onclick = () => {
 $('coverage').textContent = `Property lines load from statewide maps in ${STATE_SOURCES.length - 1} states and DC, and from county maps found automatically everywhere else. Where no county map is public, you tap the corners of your land.`;
 
 /* ---------- backup and restore ---------- */
-const APP_VERSION = 'sunplot-v17', BACKUP_KEY = 'sunplot.lastBackup';
+const APP_VERSION = 'sunplot-v18', BACKUP_KEY = 'sunplot.lastBackup';
 function backupNote(n) {
   let last = 0; try { last = +localStorage.getItem(BACKUP_KEY) || 0; } catch {}
   $('btnBackup').hidden = !n;
@@ -2793,6 +2913,7 @@ function openProject(p) {
   selId = null; placing = null; banner(null); lySpots.clearLayers(); $('spots').textContent = '';
   lyBoundary.clearLayers();
   L.polygon(P.boundary, { color: '#ff3b30', weight: 3, fill: false, interactive: false }).addTo(lyBoundary);
+  setBearing(P.bearing || 0);
   fitRing(P.boundary);
   $('planTitle').textContent = P.name; $('planSub').textContent = P.sub;
   $('date').value = P.doy; $('time').value = P.minutes;
@@ -4282,7 +4403,19 @@ function planSvg() {
 function fitRing(ring) {
   const wide = window.innerWidth >= 820, sh = $('sheet').getBoundingClientRect();
   const opts = wide ? { paddingTopLeft: [sh.right + 20, 70], paddingBottomRight: [20, 20] } : { paddingTopLeft: [20, 70], paddingBottomRight: [20, Math.min(sh.height, window.innerHeight * 0.6) + 20] };
-  map.fitBounds(L.latLngBounds(ring), { ...opts, maxZoom: 20 });
+  if (!ROT.deg) { map.fitBounds(L.latLngBounds(ring), { ...opts, maxZoom: 20 }); return; }
+  // turned map: find the zoom where the turned outline fits the visible part of the screen
+  const [pl, pt] = opts.paddingTopLeft, [pr, pb] = opts.paddingBottomRight;
+  const aw = innerWidth - pl - pr, ah = innerHeight - pt - pb;
+  const box = z => {
+    const q = ring.map(ll => { const p = map.project(L.latLng(ll), z); return rot(p.x, p.y); });
+    const xs = q.map(v => v[0]), ys = q.map(v => v[1]);
+    return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+  };
+  let z = 20, b = box(z);
+  while (z > 3 && (b.x1 - b.x0 > aw || b.y1 - b.y0 > ah)) b = box(--z);
+  const [ux, uy] = unrot((b.x0 + b.x1) / 2 - (pl - pr) / 2, (b.y0 + b.y1) / 2 - (pt - pb) / 2);
+  map.setView(map.unproject(L.point(ux, uy), z), z);
 }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 function dayOfYear(d) { return clamp(Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(d.getFullYear(), 0, 1)) / 86400000), 0, 364); }
