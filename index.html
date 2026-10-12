@@ -1596,20 +1596,18 @@ const STATE_SOURCES = [
   { st: 'NY', url: 'https://gisservices.its.ny.gov/arcgis/rest/services/NYS_Tax_Parcels_Public/FeatureServer/1', addr: 'PARCEL_ADDR', test: [42.6525, -73.7573] },
   { st: 'FL', url: 'https://gis.fdacs.gov/mapping/rest/services/GIO_Parcels_for_OAWP_Optimized/MapServer/0', test: [30.4381, -84.2816] },
   { st: 'WA', url: 'https://wisaard.dahp.wa.gov/server/rest/services/County_Parcels/MapServer/0', addr: 'SITUS_ADDRESS', test: [47.0358, -122.9048] },
-  { st: 'TX', url: 'https://feature.geographic.texas.gov/arcgis/rest/services/Parcels/stratmap_land_parcels_48_most_recent/MapServer/0', addr: 'situs_addr', test: [30.2747, -97.7404] },
+  { st: 'TX', url: 'https://services1.arcgis.com/1mtXwieMId59thmg/ArcGIS/rest/services/2019_Texas_Parcels_StratMap/FeatureServer/0', addr: 'situs_addr', test: [30.2747, -97.7404] }, // copy of TxGIO StratMap; the state's own service doesn't allow queries
   { st: 'AR', url: 'https://geostor.arkansas.gov/ArcGIS/rest/services/FEATURESERVICES/Planning_Cadastre/FeatureServer/6', test: [34.7466, -92.2890] },
   { st: 'WV', url: 'https://services.wvgis.wvu.edu/arcgis/rest/services/Planning_Cadastre/WV_Parcels/MapServer/0', test: [38.3365, -81.6123] },
   { st: 'MT', url: 'https://gisservice.mt.gov/ArcGIS/rest/services/msdi_cadastral_map_v1/MapServer/1', addr: 'AddressLine1', test: [46.5857, -112.0184] },
-  { st: 'MD', url: 'https://geodata.md.gov/imap/rest/services/PlanningCadastre/MD_ParcelBoundaries/MapServer/0', test: [38.9786, -76.4908] },
+  { st: 'MD', url: 'https://geodata.md.gov/imap/rest/services/PlanningCadastre/MD_ParcelBoundaries/MapServer/0', test: [38.9786, -76.4908], note: 'Blocks apps; works through the relay. Without it, Maryland uses the county finder.' },
   { st: 'NJ', url: 'https://services2.arcgis.com/XVOqAjTOJ5P6ngMu/arcgis/rest/services/Parcels_Composite_NJ_WM/FeatureServer/0', test: [40.2204, -74.7699] },
-  { st: 'MA', kind: 'service', url: 'https://services1.arcgis.com/hGdibHYSPO59RG1h/ArcGIS/rest/services/L3_TAXPAR_POLY_ASSESS_gdb/FeatureServer', test: [42.3587, -71.0638] },
   { st: 'CT', url: 'https://services3.arcgis.com/3FL1kr7L4LvwA2Kb/ArcGIS/rest/services/Connecticut_CAMA_and_Parcel_Layer/FeatureServer/0', test: [41.7640, -72.6822] },
   { st: 'VT', url: 'https://services1.arcgis.com/BkFxaEFNwHqX3tAw/ArcGIS/rest/services/VTPARCELS_Stacked_Polygons/FeatureServer/3', test: [44.2623, -72.5809] },
   { st: 'NH', url: 'https://nhgeodata.unh.edu/nhgeodata/rest/services/CAD/ParcelMosaic/MapServer/1', test: [43.2068, -71.5383] },
   { st: 'HI', url: 'https://geodata.hawaii.gov/arcgis/rest/services/ParcelsZoning/MapServer/25', test: [21.3073, -157.8574] },
   { st: 'CO', url: 'https://gis.colorado.gov/Public/rest/services/Address_and_Parcel/Colorado_Public_Parcels/MapServer/0', test: [39.7393, -104.9848] },
   { st: 'DC', url: 'https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Property_and_Land_WebMercator/MapServer/40', test: [38.8899, -77.0091] },
-  { st: 'WY', kind: 'service', url: 'https://gis.deq.wyo.gov/arcgis/rest/services/PARCEL_OWNER_MAP/MapServer', test: [41.1404, -104.8197] },
   { st: 'UT', kind: 'county', url: 'https://services1.arcgis.com/99lidPhWCzftIe9K/ArcGIS/rest/services/Parcels_{County}/FeatureServer/0', test: [40.7774, -111.8882], testCounty: 'Salt Lake' }
 ];
 const STATE_NAMES = { AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California', CO: 'Colorado', CT: 'Connecticut', DE: 'Delaware', DC: 'Washington, DC', FL: 'Florida', GA: 'Georgia', HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois', IN: 'Indiana', IA: 'Iowa', KS: 'Kansas', KY: 'Kentucky', LA: 'Louisiana', ME: 'Maine', MD: 'Maryland', MA: 'Massachusetts', MI: 'Michigan', MN: 'Minnesota', MS: 'Mississippi', MO: 'Missouri', MT: 'Montana', NE: 'Nebraska', NV: 'Nevada', NH: 'New Hampshire', NJ: 'New Jersey', NM: 'New Mexico', NY: 'New York', NC: 'North Carolina', ND: 'North Dakota', OH: 'Ohio', OK: 'Oklahoma', OR: 'Oregon', PA: 'Pennsylvania', RI: 'Rhode Island', SC: 'South Carolina', SD: 'South Dakota', TN: 'Tennessee', TX: 'Texas', UT: 'Utah', VT: 'Vermont', VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming', PR: 'Puerto Rico' };
@@ -1985,7 +1983,7 @@ async function runChecks() {
         return fs.length;
       });
       set(n ? 'ok' : 'warn', n ? `${n} parcels near the capitol · ${ms} ms` : `Answers, but no parcels near the capitol · ${ms} ms`);
-    } catch (e) { set('bad', why(e)); }
+    } catch (e) { set(s.note && !CONFIG.relay ? 'warn' : 'bad', s.note && !CONFIG.relay ? s.note : why(e)); }
   });
   const relayedBefore = netStats.relayed;
   await pool(tasks, 4);

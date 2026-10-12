@@ -1,7 +1,7 @@
 /* Sunplot service worker: makes the app installable, opens offline, and keeps
    recently viewed aerial photos so saved places still show a map without signal.
    Property, elevation and address lookups always go to the network. */
-const VERSION = 'sunplot-v6';
+const VERSION = 'sunplot-v7';
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'
