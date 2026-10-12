@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" media="print" onload="this.media='all'">
 <style>
 /* Leaflet 1.9.4 (BSD-2-Clause) */
 /* required styles */
@@ -1167,6 +1167,10 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
       <h2>Nationwide services</h2><div class="cklist" id="ckNational"></div>
       <h2>Statewide property lines</h2><div class="cklist" id="ckStates"></div>
       <p class="note">States not listed use the county map finder. Test a few spots there with "Test the spot on the map".</p>
+      <h2>Speed on this phone</h2>
+      <p class="muted small">Real timings from using the app on this phone, against the launch targets. Medians of the last few tries.</p>
+      <div class="cklist" id="ckSpeed"></div>
+      <div class="row"><button class="btn ghost" id="btnSpeedReset" type="button">Clear timings</button></div>
       <h2>Every state</h2>
       <p class="muted small">Looks up two real spots in each state, one in a city and one in a rural county, plus Washington, DC, the same way the app does for a user. Takes about five minutes.</p>
       <div class="row grow"><button class="btn primary" id="btnStatesRun" type="button">Test all 50 states</button><button class="btn" id="btnStatesCopy" type="button" disabled>Copy results</button></div>
@@ -1979,6 +1983,16 @@ function hostOf(url) {
 function logProblem(msg) { const t = new Date().toTimeString().slice(0, 5); if (PROBLEMS.length && PROBLEMS[PROBLEMS.length - 1].endsWith(msg)) return; PROBLEMS.push(`${t} ${msg}`); if (PROBLEMS.length > 8) PROBLEMS.shift(); }
 addEventListener('error', e => logProblem('Error: ' + (e.message || 'script')));
 addEventListener('unhandledrejection', e => logProblem('Error: ' + ((e.reason && e.reason.message) || e.reason || 'promise')));
+/* ---------- speed on this phone: real timings, kept on the device ---------- */
+const PERF_KEY = 'sunplot.perf', perfT = {};
+function perfLoad() { try { return JSON.parse(localStorage.getItem(PERF_KEY)) || {}; } catch { return {}; } }
+function perfRecord(k, ms, extra = {}) {
+  const d = perfLoad(); (d[k] = d[k] || []).unshift({ ms: Math.round(ms), at: Date.now(), ...extra }); d[k] = d[k].slice(0, 10);
+  try { localStorage.setItem(PERF_KEY, JSON.stringify(d)); } catch {}
+}
+const perfStart = k => { perfT[k] = performance.now(); };
+const perfCancel = k => { delete perfT[k]; };
+function perfEnd(k, extra) { if (perfT[k] == null) return null; const ms = performance.now() - perfT[k]; delete perfT[k]; perfRecord(k, ms, extra); return ms; }
 /* What kind of trouble the network had, so messages can say "offline" vs "server busy" vs "nothing here". */
 const NET = { offline: 0, timeout: 0, server: 0, blocked: 0 };
 const netSnap = () => ({ ...NET });
@@ -2100,13 +2114,21 @@ function placeAt(lat, lng) {
 /** Property lines under a spot: the state layer first, then the county's own map, found automatically. */
 let lastLayer = null;
 async function parcelAt(lat, lng, onStep) {
-  const place = await placeAt(lat, lng).catch(() => null);
+  // Ask the statewide map at the same time as the county lookup instead of after it: one less wait.
+  const lookup = s => (async () => {
+    const layer = await sourceLayer(s, s.kind === 'county' ? await placeP : null); if (!layer) return null;
+    const f = s.kind === 'identify' ? (await identifyAt(s.url, s.layerId, lat, lng))[0] || null : await pointQuery(layer, lat, lng);
+    return f ? { f, layer } : null;
+  })();
+  const placeP = placeAt(lat, lng).catch(() => null);
+  const early = new Map();
+  for (const s of STATE_SOURCES) if (s.kind !== 'county' && STATE_BOX[s.st] && inBox(STATE_BOX[s.st], lat, lng)) { const pr = lookup(s); pr.catch(() => {}); early.set(s, pr); }
+  const place = await placeP;
   const states = STATE_SOURCES.filter(s => place && place.st ? s.st === place.st : STATE_BOX[s.st] && inBox(STATE_BOX[s.st], lat, lng));
   for (const s of states) {
     try {
-      const layer = await sourceLayer(s, place); if (!layer) continue;
-      const f = s.kind === 'identify' ? (await identifyAt(s.url, s.layerId, lat, lng))[0] || null : await pointQuery(layer, lat, lng);
-      if (f) { lastLayer = layer; return { src: { kind: 'state', st: s.st, label: `${STATE_NAMES[s.st]} statewide parcels`, county: place && place.countyFull }, f, layer }; }
+      const r = await (early.get(s) || lookup(s));
+      if (r) { lastLayer = r.layer; return { src: { kind: 'state', st: s.st, label: `${STATE_NAMES[s.st]} statewide parcels`, county: place && place.countyFull }, f: r.f, layer: r.layer }; }
     } catch { /* fall through to the county finder */ }
   }
   if (!place) return null;
@@ -2357,6 +2379,8 @@ $('btnNorth').onclick = () => {
 // the attribution has to stay put while the map turns
 { const box = document.createElement('div'); box.className = 'attrbox'; document.body.appendChild(box); box.appendChild(map.attributionControl.getContainer()); }
 const baseTiles = L.tileLayer(SVC.usImagery, { maxNativeZoom: 16, maxZoom: 22, attribution: 'Imagery <a href="https://www.usgs.gov/" target="_blank" rel="noopener">USGS</a>' }).addTo(map);
+{ let seen = false; const first = () => { if (seen) return; seen = true; perfRecord('open', performance.now(), { warm: !!(navigator.serviceWorker && navigator.serviceWorker.controller) }); };
+  baseTiles.once('load', first); }
 const ncTiles = L.tileLayer(SVC.ncImagery, { minZoom: 15, maxNativeZoom: 20, maxZoom: 22, errorTileUrl: BLANK, attribution: '<a href="https://www.nconemap.gov/" target="_blank" rel="noopener">NC OneMap</a>' }).addTo(map);
 const ParcelTiles = L.TileLayer.extend({
   getTileUrl(c) {
@@ -2398,7 +2422,7 @@ function ringsOf(g) {
 }
 
 /* ---------- check map sources ---------- */
-$('btnCheck').onclick = () => { show('check'); };
+$('btnCheck').onclick = () => { show('check'); renderSpeed(); };
 $('btnCheckBack').onclick = () => show('find');
 $('btnCheckRun').onclick = () => runChecks();
 $('btnCheckSpot').onclick = () => checkSpot();
@@ -2516,8 +2540,27 @@ async function runStateTests() {
   $('btnStatesRun').disabled = false; $('btnStatesCopy').disabled = false; statesRunning = false;
 }
 $('btnStatesRun').onclick = () => runStateTests();
+const SPEED_ROWS = [
+  ['open', 'Map on screen after opening the app', 3000, 'Target under 3 s'],
+  ['find', 'Search or tap to property lines shown', null, 'Most of this is the county map server'],
+  ['dash', 'Plan tap to dashboard filled', null, 'Soil, flood, frost and terrain lookups'],
+  ['total', 'Search to full dashboard', 8000, 'Target under 8 s']
+];
+function renderSpeed() {
+  const box = $('ckSpeed'); box.textContent = ''; const d = perfLoad();
+  const med = a => { const v = a.map(x => x.ms).sort((x, y) => x - y); return v[Math.floor(v.length / 2)]; };
+  for (const [k, name, target, note] of SPEED_ROWS) {
+    const list = (d[k] || []).slice(0, 5), set = ckRow(box, name);
+    if (!list.length) { set('', `No timing yet. ${note}.`); continue; }
+    const m = med(list), sec = v => (v / 1000).toFixed(1) + ' s';
+    const extra = k === 'open' ? ` · last open ${list[0].warm ? 'from the phone\'s copy' : 'downloaded fresh'}` : '';
+    set(target ? (m <= target ? 'ok' : 'warn') : 'ok', `${sec(m)} (last ${sec(list[0].ms)}, ${list.length} tr${list.length === 1 ? 'y' : 'ies'})${extra} · ${note}`);
+  }
+}
+$('btnSpeedReset').onclick = () => { try { localStorage.removeItem(PERF_KEY); } catch {} renderSpeed(); };
 $('btnStatesCopy').onclick = async () => {
-  const text = `Sunplot state test ${new Date().toLocaleString()} (${APP_VERSION})\n${$('ckAllSummary').textContent}\n` + statesReport.join('\n');
+  const sp = [...$('ckSpeed').querySelectorAll('.ck')].map(r => `${r.querySelector('b').textContent}: ${r.querySelector('small').textContent}`).join('\n');
+  const text = `Sunplot state test ${new Date().toLocaleString()} (${APP_VERSION})\n${$('ckAllSummary').textContent}\n` + statesReport.join('\n') + (sp ? `\n\nSpeed on this phone\n${sp}` : '');
   try { await navigator.clipboard.writeText(text); $('btnStatesCopy').textContent = 'Copied'; }
   catch { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); $('btnStatesCopy').textContent = 'Copied'; } catch {} t.remove(); }
   setTimeout(() => { $('btnStatesCopy').textContent = 'Copy results'; }, 2500);
@@ -2620,7 +2663,7 @@ $('bannerBtn').onclick = () => {
 $('coverage').textContent = `Property lines load from statewide maps in ${STATE_SOURCES.length - 1} states and DC, and from county maps found automatically everywhere else. Where no county map is public, you tap the corners of your land.`;
 
 /* ---------- backup and restore ---------- */
-const APP_VERSION = 'sunplot-v21', BACKUP_KEY = 'sunplot.lastBackup';
+const APP_VERSION = 'sunplot-v22', BACKUP_KEY = 'sunplot.lastBackup';
 function backupNote(n) {
   let last = 0; try { last = +localStorage.getItem(BACKUP_KEY) || 0; } catch {}
   $('btnBackup').hidden = !n;
@@ -2902,6 +2945,7 @@ async function runSearch(text, magicKey) {
   const seq = ++searchSeq;
   hideSuggest();
   const st = $('findStatus'); say(st, 'Searching…');
+  perfStart('find');
   const box = $('results'); box.textContent = '';
   let gs = []; const before = netSnap();
   const slow = setTimeout(() => { if (seq === searchSeq) say(st, 'Still searching… the address service is slow right now.'); }, 6000);
@@ -2911,6 +2955,7 @@ async function runSearch(text, magicKey) {
   if (seq !== searchSeq) return;
   // one clear match: go straight there
   if (gs.length && gs[0].exact && gs[0].score >= 95 && (gs.length === 1 || gs[1].score < gs[0].score - 3)) { st.textContent = ''; return pickPoint(gs[0].lat, gs[0].lng, true); }
+  if (gs.length) perfCancel('find');   // waiting on the user to pick: not app time
   for (const g of gs.slice(0, 5)) box.appendChild(listButton(g.title, g.sub, () => pickPoint(g.lat, g.lng, true)));
   st.textContent = gs.length ? 'Pick the right one:' : 'Checking property records…';
   // backup for rural addresses the address search doesn't know: the statewide parcel address field, in that state only
@@ -2967,6 +3012,7 @@ function locateMe() {
 }
 async function pickPoint(lat, lng, fly) {
   const st = $('findStatus'); say(st, 'Looking up property lines…');
+  if (perfT.find == null) perfStart('find');
   if (fly) map.setView([lat, lng], 18);
   const before = netSnap();
   const slow = setTimeout(() => { if (st.textContent === 'Looking up property lines…') st.textContent = 'Still looking… the county map server is slow right now.'; }, 8000);
@@ -2977,9 +3023,11 @@ async function pickPoint(lat, lng, fly) {
   // nothing found: a real gap, or a server that didn't answer?
   const trouble = netTrouble(before) || (!place ? 'timeout' : null);
   candidate = { lat, lng, ring: null, title: 'This spot', sub: place ? `${place.countyFull}, ${place.st}` : `${lat.toFixed(5)}, ${lng.toFixed(5)}`, trouble };
+  perfEnd('find', { found: false });
   showCandidate();
 }
 function pickCandidate(c, fit) {
+  perfEnd('find', { found: !!c.ring });
   candidate = c; showCandidate();
   if (fit && c.ring) fitRing(c.ring);
 }
@@ -3011,6 +3059,7 @@ $('btnBackFind').onclick = () => { lyBoundary.clearLayers(); candidate = null; s
 $('btnPlan').onclick = () => {
   const c = candidate, id = (c.src.st || 'US') + '-' + c.parno;
   if (DB.projects[id]) return openProject(DB.projects[id]);
+  perfStart('dash');
   openProject(newProject(id, c.title, c.sub, c.ring, c));
 };
 
@@ -3073,7 +3122,7 @@ function openProject(p) {
   saveProject();
   if (!P.terrain) {
     $('planStatus').textContent = 'Loading terrain…';
-    loadTerrain(F, bXY).then(T => { if (p !== P) return; P.terrain = T; saveProject(); renderContours(); renderSel(); hint(); })
+    terrainJob = loadTerrain(F, bXY).then(T => { if (p !== P) return; P.terrain = T; saveProject(); renderContours(); renderSel(); hint(); })
       .catch(() => { if (p === P) $('planStatus').textContent = 'Terrain didn\'t load, so slope numbers are missing. Sun hours still work.'; });
   } else renderContours();
 }
@@ -4283,7 +4332,7 @@ function planTab(t) {
 for (const x of $('planTabs').children) x.onclick = () => { planTab(x.dataset.tab); setSheet('open'); };
 
 /* ----- overview tiles ----- */
-let dashLoading = null;
+let dashLoading = null, terrainJob = null;
 function ensureDashData() {
   const p = P; if (!p || dashLoading === p.id) return;
   dashLoading = p.id;
@@ -4293,7 +4342,11 @@ function ensureDashData() {
   if (!p.soils) jobs.push(loadSoils(p.boundary).then(s => { p.soils = s; saveProject(); }).catch(() => { p._soilFail = 1; }).finally(done));
   if (!p.flood) jobs.push(loadFlood(p.boundary).then(f => { p.flood = f; saveProject(); }).catch(() => { p._floodFail = 1; }).finally(done));
   if (!p.facts && p.parcel) jobs.push(parcelAt(p.lat0, p.lng0).then(h => { p.facts = h ? factsOf(h) : {}; if (h && !p.parcelLayer) p.parcelLayer = h.layer; saveProject(); }).catch(() => {}).finally(done));
-  Promise.allSettled(jobs).then(() => { if (dashLoading === p.id) dashLoading = null; });
+  Promise.allSettled([...jobs, terrainJob]).then(() => {
+    if (dashLoading === p.id) dashLoading = null;
+    const ms = perfEnd('dash');
+    if (ms != null) { const f = (perfLoad().find || [])[0]; if (f && f.found && Date.now() - f.at < 180000) perfRecord('total', f.ms + ms); }
+  });
 }
 function terrainStats() {
   const T = P.terrain; if (!T) return null;

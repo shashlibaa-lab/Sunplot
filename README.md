@@ -77,6 +77,10 @@ A few county servers refuse requests that come straight from an app (they show a
 
 The relay only forwards map and data services, and caches answers for a day. The free plan covers 100,000 requests a day.
 
+## Speed
+
+**Check map sources → Speed on this phone** shows real timings recorded on that phone against the launch targets: map on screen after opening (target under 3 s), search to property lines, Plan to a filled dashboard, and search to full dashboard (target under 8 s). Timings stay on the phone and are added to **Copy results**.
+
 ## When things fail
 
 Offline, slow and broken servers each get their own plain message: an offline notice at the top of the map, "couldn't reach the server" or "the map service is having issues" with a **Retry** button on search, parcel lookup, report cards and public-record sections, and a notice with **Retry** when a map layer keeps failing. When a county simply has no public parcel map, the app says so and offers **Tap my corners**.
