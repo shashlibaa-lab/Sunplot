@@ -844,6 +844,22 @@ input[type=range]{width:100%;accent-color:var(--sun);height:28px}
 .suggest button{text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:11px 12px;font:500 .92rem var(--f-body);color:var(--ink);cursor:pointer}
 .suggest button:last-child{border-bottom:0}
 .suggest button:hover,.suggest button:focus-visible{background:var(--paper)}
+/* parcel details */
+.pdata{display:grid;gap:6px}
+.pd{background:var(--paper-2);border-radius:10px;overflow:hidden}
+.pd summary{list-style:none;display:flex;align-items:center;gap:10px;padding:12px;cursor:pointer;font:600 .95rem var(--f-body)}
+.pd summary::-webkit-details-marker{display:none}
+.pd summary span{flex:1}
+.pd summary small{font:500 .76rem var(--f-mono);color:var(--muted)}
+.pd summary i{width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);margin:-4px 4px 0 0;transition:transform .15s}
+.pd[open] summary i{transform:rotate(225deg);margin-top:4px}
+.pd summary:focus-visible{outline:2px solid var(--sun);outline-offset:-2px}
+.pdb{display:grid;gap:8px;padding:0 12px 12px}
+.pdl{display:grid;grid-template-columns:minmax(0,40%) minmax(0,1fr);gap:7px 12px;margin:0;font-size:.86rem}
+.pdl dt{color:var(--muted);font-size:.8rem;overflow-wrap:anywhere}
+.pdl dd{margin:0;font-weight:500;overflow-wrap:anywhere}
+.pdl a{color:var(--ink);text-decoration-color:var(--sun);text-underline-offset:3px}
+@media (prefers-reduced-motion:reduce){.pd summary i{transition:none}}
 /* property dashboard */
 .ptabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--paper-2);border-radius:12px;padding:4px;position:sticky;top:-4px;z-index:2;box-shadow:0 4px 10px -8px rgba(0,0,0,.25)}
 .ptabs button{border:0;background:none;border-radius:9px;padding:9px 2px;font:600 .86rem var(--f-body);color:var(--muted);cursor:pointer;min-height:40px}
@@ -1015,6 +1031,7 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
         <button class="btn ghost" id="btnBackFind">Back</button>
       </div>
       <p class="note">Property lines come from county tax maps. They are close, but they are not a survey.</p>
+      <div class="pdata" id="pData"></div>
     </div>
 
     <!-- 3. Draw -->
@@ -1046,6 +1063,7 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
 
       <div class="tabp" id="tp-overview">
         <div class="dash" id="dash"></div>
+        <div class="pdata" id="dData"></div>
         <p class="status" id="planWeek" hidden></p>
         <div class="row grow"><button class="btn" id="btnReport">Full report</button><button class="btn" id="btnTodo">Planting calendar</button></div>
         <button class="btn ghost" id="btnPrint" style="justify-self:start">Print or save as PDF</button>
@@ -1749,6 +1767,9 @@ const CONFIG = {
   /* Address search uses Esri's World Geocoder (fast, good rural coverage). Fine without a key for testing;
      before launch, get a free ArcGIS Location Platform key and paste it here. */
   esriKey: '',
+  /* Parcel details show every field the county publishes, including owner names and mailing addresses
+     (public record). Set to false to hide owner and mailing fields. */
+  showOwners: true,
   contact: '',  // optional support email shown on the printed plan
   /* Optional relay for county map servers that refuse requests from apps. Deploy relay/worker.js
      (see README) and paste its address here, e.g. 'https://sunplot-relay.yourname.workers.dev'. */
@@ -2192,7 +2213,7 @@ function toCandidate(hit) {
   const id = get('id') ?? a.OBJECTID ?? a.objectid ?? a.FID ?? c.map(v => v.toFixed(5)).join(',');
   const addr = get('addr') != null && /[a-z]/i.test(String(get('addr'))) ? titleCase(String(get('addr')).split(',')[0].trim()) : '';
   return {
-    src, layer: hit.layer, ring, lat: c[0], lng: c[1], parno: String(id).trim(), acres, county, facts: factsOf(hit),
+    src, layer: hit.layer, attrs: a, ring, lat: c[0], lng: c[1], parno: String(id).trim(), acres, county, facts: factsOf(hit),
     title: addr || 'Parcel ' + String(id).trim(),
     sub: [get('city') && isNaN(+get('city')) ? titleCase(String(get('city'))) : '', county, src.st].filter(Boolean).join(', ')
   };
@@ -2287,6 +2308,7 @@ function showCandidate() {
   $('pEyebrow').textContent = !c.ring ? 'No public property lines here' : c.src && c.src.kind === 'county' ? 'Found on a county map' : 'Property found';
   $('pTitle').textContent = c.title;
   $('pSub').textContent = c.ring ? c.sub : `${c.sub}. This county doesn't publish its property lines, so tap the corners of your land instead. Everything else works the same.`;
+  renderParcelData($('pData'), c.ring ? candidateCtx(c) : { obj: {}, lat: c.lat, lng: c.lng, ring: null });
   $('pSource').textContent = c.ring ? `Source: ${c.src.label}.${c.src.kind === 'county' ? ' Found automatically, so check that the red outline matches your land.' : ''}` : '';
   const facts = $('pFacts'); facts.textContent = '';
   if (c.ring) for (const [k, v] of [['Acres', fmtAcres(c.acres, true)], ['Parcel', c.parno], ['County', c.county || '–']]) {
@@ -2335,7 +2357,7 @@ function newProject(id, name, sub, ring, c) {
   const ctr = ringCenter(ring), now = new Date();
   return {
     id, name, sub, lat0: ctr[0], lng0: ctr[1], boundary: ring.map(([a, b]) => [+a.toFixed(7), +b.toFixed(7)]),
-    parcel: c && c.ring ? { id: c.parno, county: c.county, state: c.src.st, source: c.src.label } : null, facts: c && c.ring ? c.facts : null,
+    parcel: c && c.ring ? { id: c.parno, county: c.county, state: c.src.st, source: c.src.label, attrs: c.attrs } : null, facts: c && c.ring ? c.facts : null,
     parcelLayer: c && c.layer ? c.layer : null,
     items: [], doy: dayOfYear(now), minutes: clamp(now.getHours() * 60 + now.getMinutes(), 360, 1200),
     layers: { heat: true, shade: true, cont: false, parcels: false },
@@ -2357,7 +2379,7 @@ function openProject(p) {
   $('lyHeat').checked = P.layers.heat; $('lyShade').checked = P.layers.shade; $('lyCont').checked = P.layers.cont; $('lyParcels').checked = P.layers.parcels;
   applyParcelLayer();
   show('plan');
-  applyBase(); applyOverlays(); planTab(P.tab || 'overview');
+  applyBase(); applyOverlays(); renderParcelData($('dData'), projectCtx()); planTab(P.tab || 'overview');
   hint();
   castersChanged(); renderItems(); renderShade(); renderSel();
   saveProject();
@@ -2722,14 +2744,15 @@ order by x.acres desc`;
 }
 /** FEMA National Flood Hazard Layer, clipped to the property. */
 async function loadFlood(boundary) {
+  const lxy = localXY(boundary);
   const geometry = JSON.stringify({ rings: [closedLngLat(boundary)], spatialReference: { wkid: 4326 } });
   const body = new URLSearchParams({ geometry, geometryType: 'esriGeometryPolygon', inSR: '4326', spatialRel: 'esriSpatialRelIntersects', outFields: 'FLD_ZONE,ZONE_SUBTY,SFHA_TF', returnGeometry: 'true', outSR: '4326', geometryPrecision: '6', maxAllowableOffset: '0.00002', f: 'json' });
   const j = await getJSON(`${SVC.fema}/query`, { method: 'POST', body }, 30000);
   const feats = (j.features || []).map(f => {
     const a = f.attributes || {};
-    return { zone: a.FLD_ZONE, sub: a.ZONE_SUBTY || '', sfha: a.SFHA_TF === 'T', five: /0\.2 PCT/i.test(a.ZONE_SUBTY || ''), rings: ((f.geometry && f.geometry.rings) || []).map(r => r.map(([lo, la]) => F.toXY(la, lo))) };
+    return { zone: a.FLD_ZONE, sub: a.ZONE_SUBTY || '', sfha: a.SFHA_TF === 'T', five: /0\.2 PCT/i.test(a.ZONE_SUBTY || ''), rings: ((f.geometry && f.geometry.rings) || []).map(r => r.map(([lo, la]) => lxy.fr.toXY(la, lo))) };
   });
-  const sh = floodShares(bXY, feats);
+  const sh = floodShares(lxy.xy, feats);
   return { mapped: feats.length > 0, zones: [...new Set(feats.map(f => f.zone).filter(Boolean))], sfha: sh.sfha, five: sh.five, checked: Date.now() };
 }
 /** NOAA ACIS: 1991–2020 daily lows from the PRISM grid, summarized to frost dates and hardiness zone. */
@@ -3480,6 +3503,244 @@ async function whatsHere(lat, lng) {
     .then(j => { const a = j.results && j.results[0] && j.results[0].attributes; const v = a && parseInt(a['Pixel Value'] ?? a.Value ?? a.VALUE, 10); setCover(v ? NLCD_CLASSES[v] || `Class ${v}` : 'Unavailable'); }).catch(() => setCover('Unavailable'));
 }
 $('hereClose').onclick = () => { hereMarker.remove(); $('here').hidden = true; hereSeq++; };
+
+
+/* ============================================================
+   Parcel details: every public record for a parcel, in drop-down sections
+   ============================================================ */
+const TIGER = 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb';
+/* Labels for field names that counties commonly use. Anything else falls back to the layer's own alias, then a cleaned-up name. */
+const FIELD_LABELS = {
+  parno: 'Parcel number', altparno: 'Alternate parcel number', nparno: 'Parcel number (state)', pin: 'Parcel ID (PIN)', apn: 'Assessor parcel number', parcel_id: 'Parcel ID', parcelid: 'Parcel ID',
+  ownname: 'Owner', ownname2: 'Second owner', ownfrst: 'Owner first name', ownlast: 'Owner last name', owntype: 'Owner type', subowntype: 'Owner subtype',
+  mailadd: 'Mailing address', mcity: 'Mailing city', mstate: 'Mailing state', mzip: 'Mailing ZIP', munit: 'Mailing unit',
+  siteadd: 'Site address', sunit: 'Site unit', scity: 'Site city', sstate: 'Site state', szip: 'Site ZIP',
+  gisacres: 'Acres (mapped)', recareano: 'Acres (deed)', recareatx: 'Recorded area', struct: 'Has structure', multistruc: 'Multiple structures', structno: 'Number of structures', structyear: 'Year built',
+  parval: 'Total value', landval: 'Land value', improvval: 'Building value', parvaltype: 'Value type', presentval: 'Present-use value',
+  saledate: 'Sale date', saledatetx: 'Sale date (text)', legdecfull: 'Legal description', subdivisio: 'Subdivision', parusecode: 'Use code', parusedesc: 'Use', parusecd2: 'Use code 2', parusedsc2: 'Use 2',
+  cntyname: 'County', cntyfips: 'County FIPS', stcntyfips: 'State-county FIPS', revisedate: 'Record updated', sourceref: 'Source', sourcedate: 'Source date', sourceagnt: 'Source agency', transfdate: 'State update', mapref: 'Map reference', subsurfown: 'Subsurface owner',
+  situs_addr: 'Site address', situs_city: 'Site city', owner_name: 'Owner', mkt_value: 'Market value', land_value: 'Land value', imp_value: 'Improvement value', legal_desc: 'Legal description', year_built: 'Year built', gis_area: 'Area (mapped)', legal_area: 'Area (deed)'
+};
+const HIDE_FIELD = /^(objectid|fid|oid|shape|shape_?_?(area|length|len)|st_(area|length|perimeter)\(shape\)|shape\.st(area|length)\(\)|globalid|created_(user|date)|last_edited_(user|date)|gnisid|stfips|transfdate)$/i;
+const OWNER_FIELD = /^(own|ow_|mail|m(add|city|state|zip|unit)$|owner|pstladress|care_?of|dba)/i;
+const layerMetaCache = new Map();
+function layerMeta(url) {
+  if (!layerMetaCache.has(url)) { const p = getJSON(`${url}?f=json`, {}, 12000); layerMetaCache.set(url, p); p.catch(() => layerMetaCache.delete(url)); }
+  return layerMetaCache.get(url);
+}
+function niceName(k, f) {
+  const own = FIELD_LABELS[k.toLowerCase()];
+  if (own) return own;
+  if (f && f.alias && f.alias !== f.name && !/^[A-Z0-9_]+$/.test(f.alias)) return f.alias;
+  const t = (f && f.alias || k).replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim().toLowerCase();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+function niceValue(k, v, f) {
+  if (v == null) return null;
+  const s = String(v).trim();
+  if (!s || /^(null|<null>|none)$/i.test(s)) return null;
+  const isDate = (f && /Date/i.test(f.type)) || (/date|_dt$/i.test(k) && typeof v === 'number' && v > 1e10);
+  if (isDate && typeof v === 'number') return new Date(v).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  const n = typeof v === 'number' ? v : (/^-?[\d,]+(\.\d+)?$/.test(s) ? parseFloat(s.replace(/,/g, '')) : NaN);
+  if (isFinite(n) && /val|price|amount|assess|apprais|tax_?amt|market/i.test(k) && !/code|type|id$|year|class/i.test(k)) return '$' + Math.round(n).toLocaleString();
+  if (isFinite(n) && /acre/i.test(k)) return `${n.toLocaleString(undefined, { maximumFractionDigits: 3 })} ac`;
+  if (typeof v === 'number' && !Number.isInteger(v)) return v.toLocaleString(undefined, { maximumFractionDigits: 4 });
+  return s;
+}
+function pdRows(body, rows, note) {
+  body.textContent = '';
+  const dl = document.createElement('dl'); dl.className = 'pdl';
+  for (const [k, v, href] of rows) {
+    if (v == null || v === '') continue;
+    const dt = document.createElement('dt'), dd = document.createElement('dd');
+    dt.textContent = k;
+    if (href) { const a = document.createElement('a'); a.href = href; a.target = '_blank'; a.rel = 'noopener'; a.textContent = v; dd.appendChild(a); }
+    else dd.textContent = v;
+    dl.append(dt, dd);
+  }
+  if (!dl.children.length) { const p = document.createElement('p'); p.className = 'muted small'; p.textContent = 'Nothing published here.'; body.appendChild(p); }
+  else body.appendChild(dl);
+  if (note) { const p = document.createElement('p'); p.className = 'note'; p.textContent = note; body.appendChild(p); }
+  return dl.children.length / 2;
+}
+function localXY(ring) { const c = ringCenter(ring), fr = makeFrame(c[0], c[1]); return { fr, xy: ring.map(([a, b]) => fr.toXY(a, b)) }; }
+async function tigerIdentify(service, lat, lng) {
+  const d = 0.0005, q = new URLSearchParams({ geometry: `${lng},${lat}`, geometryType: 'esriGeometryPoint', sr: '4326', layers: 'all', tolerance: '0', mapExtent: [lng - d, lat - d, lng + d, lat + d].join(','), imageDisplay: '200,200,96', returnGeometry: 'false', f: 'json' });
+  const j = await getJSON(`${TIGER}/${service}/MapServer/identify?${q}`, {}, 15000);
+  return j.results || [];
+}
+
+const PD_SECTIONS = [
+  ['record', 'County parcel record', true],
+  ['location', 'Location and districts', false],
+  ['land', 'Soil and land cover', true],
+  ['water', 'Water, flood and wetlands', true],
+  ['terrain', 'Terrain and climate', true],
+  ['links', 'Maps and links', false]
+];
+const PD_LOAD = {
+  async record(ctx, body, count) {
+    let attrs = ctx.obj.attrs, layer = ctx.obj.layer, source = ctx.source;
+    if (!attrs) {
+      const h = await parcelAt(ctx.lat, ctx.lng);
+      if (!h) { pdRows(body, [], 'No public parcel record covers this spot.'); count.textContent = ''; return; }
+      attrs = h.f.properties; layer = h.layer; source = h.src.label;
+      ctx.obj.attrs = attrs; ctx.obj.layer = layer; ctx.saved && ctx.saved();
+    }
+    let fields = {};
+    if (layer && !identifyBases().some(b => layer.startsWith(b))) {
+      try { const m = await layerMeta(layer); for (const f of m.fields || []) fields[f.name.toLowerCase()] = f; } catch { /* labels fall back to cleaned-up names */ }
+    }
+    const rows = Object.entries(attrs)
+      .filter(([k]) => !HIDE_FIELD.test(k) && !/^shape/i.test(k) && (CONFIG.showOwners || !OWNER_FIELD.test(k)))
+      .map(([k, v]) => { const f = fields[k.toLowerCase()], label = niceName(k, f); return [label, niceValue(`${k} ${label}`, v, f), /^https?:\/\//i.test(String(v)) ? String(v) : null]; })
+      .filter(r => r[1] != null);
+    const n = pdRows(body, rows, `From ${source || 'the county parcel map'}. County records can lag recent sales and changes.`);
+    count.textContent = `${n} fields`;
+  },
+  async location(ctx, body, count) {
+    const svc = ['State_County', 'Places_CouSub_ConCity_SubMCD', 'Tracts_Blocks', 'School', 'Legislative', 'PUMA_TAD_TAZ_UGA_ZCTA'];
+    const res = (await Promise.allSettled(svc.map(s => tigerIdentify(s, ctx.lat, ctx.lng)))).flatMap(r => r.status === 'fulfilled' ? r.value : []);
+    const pick = (re, key) => { const r = res.find(x => re.test(x.layerName || '')); return r ? (r.attributes[key] || r.attributes.NAME || r.attributes.BASENAME || r.value) : null; };
+    const city = pick(/^Incorporated Places/i);
+    const rows = [
+      ['State', pick(/^States/i)],
+      ['County', pick(/^Counties/i)],
+      ['City or town', city || 'Unincorporated (county rules apply)'],
+      ['Community', city ? null : pick(/Census Designated Places/i)],
+      ['Township or county division', pick(/County Subdivisions/i)],
+      ['ZIP code area', pick(/ZIP Code|ZCTA/i, 'BASENAME')],
+      ['School district', pick(/Unified School/i) || pick(/Elementary School/i)],
+      ['High school district', pick(/Secondary School/i)],
+      ['U.S. House district', pick(/Congressional/i)],
+      ['State senate district', pick(/Legislative Districts? - Upper/i)],
+      ['State house district', pick(/Legislative Districts? - Lower/i)],
+      ['Census tract', pick(/Census Tracts/i)],
+      ['Census block group', pick(/Block Groups/i)],
+      ['Coordinates', `${ctx.lat.toFixed(6)}, ${ctx.lng.toFixed(6)}`]
+    ];
+    if (!res.length) rows.splice(0, rows.length - 1);
+    const n = pdRows(body, rows, res.length ? 'From the US Census Bureau (TIGERweb).' : 'District lookups are unavailable right now.');
+    count.textContent = `${n} items`;
+  },
+  async land(ctx, body, count) {
+    const o = ctx.obj;
+    const [soils, cover] = await Promise.allSettled([o.soils ? Promise.resolve(o.soils) : loadSoils(ctx.ring), getJSON(`${GIS.nlcd}/identify?${identifyParams(ctx.lat, ctx.lng, 'all:2', 0)}`, {}, 12000)]);
+    if (soils.status === 'fulfilled') { o.soils = soils.value; ctx.saved && ctx.saved(); }
+    const rows = [];
+    const cv = cover.status === 'fulfilled' && cover.value.results && cover.value.results[0] && cover.value.results[0].attributes;
+    const code = cv && parseInt(cv['Pixel Value'] ?? cv.Value ?? cv.VALUE, 10);
+    rows.push(['Land cover at center (2021)', code ? NLCD_CLASSES[code] || `Class ${code}` : null]);
+    if (soils.status === 'fulfilled' && soils.value.length) {
+      const s = soils.value, tot = s.reduce((a, x) => a + x.acres, 0);
+      const prime = s.filter(x => /^all areas are prime|^prime farmland/i.test(x.farm || '')).reduce((a, x) => a + x.acres, 0);
+      rows.push(['Prime farmland', `${fmtAcres(prime, true)} ac (${pct(prime / tot)})`]);
+      for (const x of s) rows.push([`${x.sym ? x.sym + ' · ' : ''}${fmtAcres(x.acres, true)} ac`, [x.name, x.drain, x.ph != null ? `pH ${x.ph.toFixed(1)}` : null, x.slope != null ? `${Math.round(x.slope)}% slope` : null, x.flood && !/^none$/i.test(x.flood) ? `floods ${x.flood.toLowerCase()}` : null, x.farm].filter(Boolean).join(' · ')]);
+    } else rows.push(['Soil survey', soils.status === 'fulfilled' ? 'No soil survey covers this parcel' : 'Unavailable right now']);
+    const n = pdRows(body, rows, 'Soil from the USDA soil survey (SSURGO); land cover from the National Land Cover Database.');
+    count.textContent = `${n} items`;
+  },
+  async water(ctx, body, count) {
+    const o = ctx.obj;
+    const ringJSON = JSON.stringify({ rings: [closedLngLat(ctx.ring, 60)], spatialReference: { wkid: 4326 } });
+    const polyId = (base, layers) => getJSON(`${base}/identify?${new URLSearchParams({ geometry: ringJSON, geometryType: 'esriGeometryPolygon', sr: '4326', layers, tolerance: '0', mapExtent: (() => { const [a, b, c, d] = bboxOf(ctx.ring.map(([la, lo]) => [lo, la])); return [a, b, c, d].join(','); })(), imageDisplay: '400,400,96', returnGeometry: 'false', f: 'json' })}`, {}, 15000);
+    const [fl, wet, nhd] = await Promise.allSettled([o.flood ? Promise.resolve(o.flood) : loadFlood(ctx.ring), polyId(GIS.nwi, 'all:0'), polyId(GIS.nhd, 'all')]);
+    const rows = [];
+    if (fl.status === 'fulfilled') {
+      o.flood = fl.value; ctx.saved && ctx.saved();
+      const f = fl.value;
+      rows.push(['FEMA flood map', f.mapped ? `Zones ${f.zones.join(', ')}` : 'Not mapped here']);
+      if (f.mapped) { rows.push(['In 100-year floodplain', pct(f.sfha)]); rows.push(['In 500-year area', pct(f.five)]); rows.push(['Flood insurance', f.sfha > 0 ? 'Usually required by lenders for buildings in the floodplain' : 'Not required by FEMA rules']); }
+    } else rows.push(['FEMA flood map', 'Unavailable right now']);
+    if (wet.status === 'fulfilled') {
+      const w = (wet.value.results || []).map(r => r.attributes || {});
+      const types = [...new Set(w.map(a => `${a.WETLAND_TYPE || 'Wetland'}${a.ATTRIBUTE ? ` (${a.ATTRIBUTE})` : ''}`))];
+      rows.push(['Wetlands', types.length ? types.join('; ') : 'None mapped on this parcel']);
+    } else rows.push(['Wetlands', 'Unavailable right now']);
+    if (nhd.status === 'fulfilled') {
+      const r = (nhd.value.results || []).filter(x => /flowline|waterbody|area/i.test(x.layerName || ''));
+      const names = [...new Set(r.map(x => x.attributes.GNIS_NAME || x.attributes['GNIS Name'] || x.attributes.gnis_name).filter(v => v && !/null/i.test(v)))];
+      const kinds = [...new Set(r.map(x => x.layerName.replace(/ - .*/, '').replace(/s$/, '')))];
+      rows.push(['Streams and ponds', r.length ? `${kinds.join(', ')}${names.length ? `: ${names.join(', ')}` : ''}` : 'None mapped on this parcel']);
+    }
+    const n = pdRows(body, rows, 'FEMA National Flood Hazard Layer, USFWS National Wetlands Inventory and USGS hydrography. Not an official flood or wetland determination.');
+    count.textContent = `${n} items`;
+  },
+  async terrain(ctx, body, count) {
+    const o = ctx.obj, { fr, xy } = localXY(ctx.ring);
+    const [T, cl] = await Promise.allSettled([o.terrain ? Promise.resolve(o.terrain) : loadTerrain(fr, xy), o.climate ? Promise.resolve(o.climate) : loadClimate(ctx.lat, ctx.lng)]);
+    const rows = [];
+    if (T.status === 'fulfilled') {
+      o.terrain = T.value;
+      const ts = terrainStatsFor(T.value, xy);
+      if (ts) rows.push(['Elevation', `${Math.round(ts.lo).toLocaleString()}–${Math.round(ts.hi).toLocaleString()} ft`], ['Average slope', `${ts.slope.toFixed(1)}% (${slopeWord(ts.slope).toLowerCase()})`], ['Steepest spot', `${ts.max.toFixed(1)}%`], ['Faces', ts.faces || 'Nearly flat']);
+    } else rows.push(['Elevation', 'Unavailable right now']);
+    if (cl.status === 'fulfilled' && cl.value) {
+      const c = cl.value; o.climate = c;
+      rows.push(['Hardiness zone', c.zone], ['Typical last spring frost', fmtMD(c.lastFrost)], ['Safe planting date', fmtMD(c.safeAfter)], ['Typical first fall frost', fmtMD(c.firstFrost)], ['Frost-free days', String(c.frostFree)], ['Coldest night, typical year', `${Math.round(c.extremeMin)}°F`]);
+    } else rows.push(['Climate', 'Unavailable right now']);
+    ctx.saved && ctx.saved();
+    const n = pdRows(body, rows, 'Elevation from USGS 3DEP; frost dates and zone from 30 years of NOAA daily lows (PRISM via ACIS).');
+    count.textContent = `${n} items`;
+  },
+  async links(ctx, body, count) {
+    const ll = `${ctx.lat.toFixed(6)},${ctx.lng.toFixed(6)}`;
+    const rows = [
+      ['Google Maps', 'Open the spot', `https://www.google.com/maps?q=${ll}`],
+      ['FEMA flood map', 'Official flood map viewer', `https://msc.fema.gov/portal/search?AddressQuery=${encodeURIComponent(ll)}`],
+      ['Soil survey', 'USDA Web Soil Survey', 'https://websoilsurvey.nrcs.usda.gov/app/'],
+      ['Wetlands mapper', 'USFWS viewer', 'https://fwsprimary.wim.usgs.gov/wetlands/apps/wetlands-mapper/'],
+      ['Old topo maps', 'USGS TopoView', `https://ngmdb.usgs.gov/topoview/viewer/#15/${ctx.lat.toFixed(4)}/${ctx.lng.toFixed(4)}`]
+    ];
+    const attrs = ctx.obj.attrs || {};
+    for (const [k, v] of Object.entries(attrs)) if (/^https?:\/\//i.test(String(v))) rows.push([niceName(k), 'County record page', String(v)]);
+    const n = pdRows(body, rows);
+    count.textContent = `${n} links`;
+  }
+};
+function terrainStatsFor(T, xy) {
+  let n = 0, sum = 0, gx = 0, gy = 0, lo = Infinity, hi = -Infinity, max = 0;
+  for (let j = 0; j < T.n; j++) for (let i = 0; i < T.n; i++) {
+    const x = T.x0 + i * T.dx, y = T.y0 + j * T.dy;
+    if (!inPoly(x, y, xy)) continue;
+    const z = T.z[j * T.n + i], s = slopeAt(T, x, y);
+    n++; sum += s.pct; gx += s.gx; gy += s.gy; if (z < lo) lo = z; if (z > hi) hi = z; if (s.pct > max) max = s.pct;
+  }
+  if (!n) return null;
+  const az = (Math.atan2(-gx, -gy) / RAD + 360) % 360, names = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
+  return { slope: sum / n, max, lo, hi, faces: Math.hypot(gx, gy) / n < 0.005 ? null : names[Math.round(az / 45) % 8] };
+}
+/** Draw the drop-down sections. Each loads the first time it's opened. */
+function renderParcelData(box, ctx) {
+  box.textContent = '';
+  const h = document.createElement('div'); h.className = 'lhead'; h.innerHTML = '<h2>Public records</h2>';
+  const all = document.createElement('button'); all.type = 'button'; all.className = 'btn ghost'; all.textContent = 'Open all';
+  all.onclick = () => { const ds = box.querySelectorAll('details'), open = [...ds].some(d => !d.open); ds.forEach(d => { d.open = open; }); all.textContent = open ? 'Close all' : 'Open all'; };
+  h.appendChild(all); box.appendChild(h);
+  for (const [id, title, needsRing] of PD_SECTIONS) {
+    if (needsRing && !ctx.ring) continue;
+    const d = document.createElement('details'); d.className = 'pd';
+    d.innerHTML = '<summary><span></span><small></small><i></i></summary><div class="pdb"><p class="muted small">Loading…</p></div>';
+    d.querySelector('span').textContent = title;
+    const body = d.querySelector('.pdb'), count = d.querySelector('small');
+    let state = 0; // 0 idle, 1 loading, 2 done
+    d.addEventListener('toggle', () => {
+      if (!d.open || state) return;
+      state = 1;
+      PD_LOAD[id](ctx, body, count).then(() => { state = 2; }).catch(() => { state = 0; body.innerHTML = '<p class="status err">Couldn\'t load this right now. Close and reopen to try again.</p>'; });
+    });
+    box.appendChild(d);
+  }
+}
+function projectCtx() {
+  P.parcel = P.parcel || null;
+  const obj = { get attrs() { return P.parcel && P.parcel.attrs; }, set attrs(v) { if (P.parcel) P.parcel.attrs = v; else P.parcel = { attrs: v }; },
+    get layer() { return P.parcelLayer; }, set layer(v) { P.parcelLayer = P.parcelLayer || v; },
+    get soils() { return P.soils; }, set soils(v) { P.soils = v; }, get flood() { return P.flood; }, set flood(v) { P.flood = v; },
+    get terrain() { return P.terrain; }, set terrain(v) { P.terrain = v; }, get climate() { return P.climate; }, set climate(v) { P.climate = v; } };
+  return { obj, lat: P.lat0, lng: P.lng0, ring: P.boundary, source: P.parcel && P.parcel.source, saved: () => saveProject() };
+}
+function candidateCtx(c) { return { obj: c, lat: c.lat, lng: c.lng, ring: c.ring, source: c.src && c.src.label }; }
 
 /* ---------- printable plan ---------- */
 $('btnPrint').onclick = () => { buildPrint(); window.print(); };

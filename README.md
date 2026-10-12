@@ -69,6 +69,17 @@ Once a property is open, four tabs sit under its name:
 - **Sun:** date and time controls and "Where should my garden go?"
 - **Garden:** add beds, trees and buildings, and edit the selected one.
 
+## Public records drop-downs
+
+Tap a parcel (or open the Overview tab) to see **Public records**, in sections that open when tapped:
+
+- **County parcel record:** every field the county publishes for that parcel, labeled and formatted, including owner and mailing address where the county publishes them. Set `CONFIG.showOwners` to `false` to hide owner and mailing fields.
+- **Location and districts:** state, county, city or unincorporated, township, ZIP, school district, U.S. House, state senate and house districts, census tract and block group (US Census).
+- **Soil and land cover:** every soil type on the parcel with acres, drainage, pH and farmland class, plus land cover.
+- **Water, flood and wetlands:** FEMA zones and floodplain share, wetlands and named streams on the parcel.
+- **Terrain and climate:** elevation range, slope, which way it faces, hardiness zone and frost dates.
+- **Maps and links:** Google Maps, FEMA's official flood map, Web Soil Survey, the wetlands mapper, old USGS topo maps, and any record links the county provides.
+
 ## Planning beds
 
 Tap a bed on the map, then **Plan rows and crops**. Each bed is split into rows (30 in planted, 18 in paths by default; change it under Bed setup, or turn the rows across the bed). Tap a row to add a crop: the app suggests dates from the property's frost dates, finds open space in the row, splits successions into equal plantings, and counts plants and seeds. **Planting calendar and seed list** on the map screen shows every task week by week and the seeds to buy. The crop list and its typical spacing and timing live in `CROP_LIB` in `index.html`.
