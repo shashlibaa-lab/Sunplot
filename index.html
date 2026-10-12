@@ -713,6 +713,8 @@ body{background:var(--pine);color:var(--ink);font:15px/1.45 var(--f-body);overfl
 .attrbox{position:fixed;right:0;bottom:0;z-index:500;pointer-events:none}
 .attrbox .leaflet-control-attribution{pointer-events:auto;margin:0;background:rgba(255,255,255,.75);color:#333;font:10px/1.5 var(--f-body);padding:0 6px;border-radius:6px 0 0 0}
 .attrbox .leaflet-control-attribution a{color:#2a6b8a}
+#tp-layers.free .proj{display:none!important}
+#tp-layers.free{display:grid;gap:14px}
 .pastrow{display:grid;grid-template-columns:44px 1fr 44px;gap:6px;align-items:center}
 .pastrow .btn{min-height:46px;padding:0}
 .fab.north svg{width:26px;height:26px;transition:transform .05s linear}
@@ -1035,6 +1037,7 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
 <div class="top">
   <div class="brand"><i></i>Sunplot</div>
   <div class="sp"></div>
+  <button class="fab" id="btnLayers" aria-label="Map layers" title="Map layers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12.5l9 5 9-5"/><path d="M3 16.5l9 5 9-5" opacity=".55"/></svg></button>
   <button class="fab north" id="btnNorth" aria-label="Turn map back to north up" title="North up" hidden><svg viewBox="0 0 24 24" id="needle" aria-hidden="true"><path d="M12 2.5l4.2 9.5H7.8z" fill="#d64541"/><path d="M12 21.5L7.8 12h8.4z" fill="currentColor" opacity=".45"/><text x="12" y="10.4" text-anchor="middle" font-size="5.2" font-weight="700" fill="#fff" font-family="system-ui,sans-serif">N</text></svg></button>
   <button class="fab" id="btnLocate" aria-label="Go to my location" title="My location"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
   <button class="fab" id="btnFit" aria-label="Show whole property" title="Whole property" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
@@ -1128,6 +1131,17 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
       <p class="note footlinks"><a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a> · <a href="terms.html" target="_blank" rel="noopener">Terms of use</a></p>
     </div>
 
+    <!-- Map layers while browsing (no property open) -->
+    <div class="view" id="vLayers" hidden>
+      <div class="head">
+        <button class="btn ghost" id="btnLayersBack" type="button" style="justify-self:start;min-height:0;padding:0 0 4px">← Back</button>
+        <span class="eyebrow">Map layers</span><h1>Layers</h1>
+        <p class="muted small">Layers stay on while you look around. Tap the map to see what's at any spot.</p>
+      </div>
+      <p class="status" id="freeZoomNote" hidden>Zoom in closer to see the overlays.</p>
+      <div id="freeHost"></div>
+    </div>
+
     <!-- 8. Check map sources -->
     <div class="view" id="vCheck" hidden>
       <div class="head">
@@ -1142,6 +1156,11 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
       <h2>Nationwide services</h2><div class="cklist" id="ckNational"></div>
       <h2>Statewide property lines</h2><div class="cklist" id="ckStates"></div>
       <p class="note">States not listed use the county map finder. Test a few spots there with "Test the spot on the map".</p>
+      <h2>Every state</h2>
+      <p class="muted small">Looks up a real neighborhood in each state and the District of Columbia, the same way the app does for a user. Takes a few minutes.</p>
+      <div class="row grow"><button class="btn primary" id="btnStatesRun" type="button">Test all 50 states</button><button class="btn" id="btnStatesCopy" type="button" disabled>Copy results</button></div>
+      <p class="note" id="ckAllSummary"></p>
+      <div class="cklist" id="ckAll"></div>
     </div>
 
     <!-- 2. Parcel -->
@@ -1202,7 +1221,7 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
           <p class="note" id="pastNote"></p></div>
         <div class="lhead"><h2>Overlays</h2><span class="muted small" id="layerCount"></span><button class="btn ghost" id="ovClear" type="button">Clear</button></div>
         <div class="field"><label for="ovOpacity">Overlay strength</label><input type="range" id="ovOpacity" min="15" max="100" step="5" value="60"></div>
-        <div class="lgroup"><span class="eyebrow">Property</span>
+        <div class="lgroup proj"><span class="eyebrow">Property</span>
           <label class="sw"><input type="checkbox" id="lyParcels"><span><b>Property lines</b><small>Neighboring parcels from county maps</small></span><i></i></label>
         </div>
         <div class="lgroup"><span class="eyebrow">Water and flood</span>
@@ -1217,11 +1236,11 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
         </div>
         <div class="lgroup"><span class="eyebrow">Terrain</span>
           <label class="sw"><input type="checkbox" id="ov-contours"><span><b>Contour lines</b><small>USGS topographic contours</small></span><i></i></label>
-          <label class="sw"><input type="checkbox" id="lyCont"><span><b>Fine contours</b><small>From elevation over this property</small></span><i></i></label>
+          <label class="sw proj"><input type="checkbox" id="lyCont"><span><b>Fine contours</b><small>From elevation over this property</small></span><i></i></label>
           <label class="sw"><input type="checkbox" id="ov-slope"><span><b>Slope</b><small>Steeper ground is darker</small></span><i></i></label>
           <label class="sw"><input type="checkbox" id="ov-aspect"><span><b>Slope direction</b><small>Which way the ground faces</small></span><i></i></label>
         </div>
-        <div class="lgroup"><span class="eyebrow">Sun</span>
+        <div class="lgroup proj"><span class="eyebrow">Sun</span>
           <label class="sw"><input type="checkbox" id="lyHeat" checked><span><b>Sun-hours map</b><small>Hours of direct sun on the chosen date</small></span><i></i></label>
           <label class="sw"><input type="checkbox" id="lyShade" checked><span><b>Shadows</b><small>From your trees and buildings</small></span><i></i></label>
         </div>
@@ -1987,14 +2006,16 @@ async function arcQuery(layerUrl, params, ms = 15000) {
 }
 const pointParams = (lat, lng) => ({ geometry: `${lng},${lat}`, geometryType: 'esriGeometryPoint', inSR: '4326', spatialRel: 'esriSpatialRelIntersects' });
 /** The parcel under a spot, if it's a believable lot (not a road sliver or a whole county). */
+let probeDeg = 0; // state test: look a little around the spot so a road or park doesn't count as "no parcels"
 async function pointQuery(layer, lat, lng, ms) {
-  const fs = await arcQuery(layer, pointParams(lat, lng), ms);
+  const d = probeDeg;
+  const fs = await arcQuery(layer, d ? { geometry: [lng - d, lat - d, lng + d, lat + d].join(','), geometryType: 'esriGeometryEnvelope', inSR: '4326', spatialRel: 'esriSpatialRelIntersects' } : pointParams(lat, lng), ms);
   return fs.find(f => { const r = biggestRing(f.geometry); if (!r) return false; const fr = makeFrame(lat, lng), ac = polyArea(r.map(([a, b]) => fr.toXY(a, b))) / 43560; return ac > 0.002 && ac < 200000; }) || null;
 }
 
 /** For services that answer "what's at this point" but refuse searches (Texas). */
 async function identifyAt(base, layerId, lat, lng, ms = 15000) {
-  const d = 0.001, q = new URLSearchParams({ geometry: `${lng},${lat}`, geometryType: 'esriGeometryPoint', sr: '4326', layers: `all:${layerId}`, tolerance: '0', mapExtent: [lng - d, lat - d, lng + d, lat + d].join(','), imageDisplay: '400,400,96', returnGeometry: 'true', f: 'json' });
+  const d = 0.001, q = new URLSearchParams({ geometry: `${lng},${lat}`, geometryType: 'esriGeometryPoint', sr: '4326', layers: `all:${layerId}`, tolerance: probeDeg ? '120' : '0', mapExtent: [lng - d, lat - d, lng + d, lat + d].join(','), imageDisplay: '400,400,96', returnGeometry: 'true', f: 'json' });
   const j = await getJSON(`${base}/identify?${q}`, {}, ms);
   return (j.results || []).map(r => esriToGeo({ attributes: r.attributes, geometry: r.geometry })).filter(f => biggestRing(f.geometry));
 }
@@ -2394,6 +2415,54 @@ async function runChecks() {
   $('ckSummary').textContent = `${document.querySelectorAll('#vCheck .dot.ok').length} working, ${document.querySelectorAll('#vCheck .dot.warn').length} with warnings, ${document.querySelectorAll('#vCheck .dot.bad').length} failing.${netStats.relayed > relayedBefore ? ` ${netStats.relayed - relayedBefore} requests went through the relay.` : ''}`;
   $('btnCheckRun').disabled = false; checking = false;
 }
+/* One real neighborhood per state (residential blocks near the capital or largest city). */
+const STATE_TESTS = [
+  ['AL', 'Montgomery', 32.3540, -86.2930], ['AK', 'Anchorage', 61.1960, -149.8650], ['AZ', 'Phoenix', 33.4710, -112.0890], ['AR', 'Little Rock', 34.7560, -92.3080],
+  ['CA', 'Sacramento', 38.5680, -121.4560], ['CO', 'Denver', 39.7350, -104.9510], ['CT', 'Hartford', 41.7690, -72.7080], ['DE', 'Dover', 39.1610, -75.5390],
+  ['DC', 'Washington', 38.9340, -77.0590], ['FL', 'Tallahassee', 30.4570, -84.2730], ['GA', 'Atlanta', 33.7780, -84.3530], ['HI', 'Honolulu', 21.2830, -157.8030],
+  ['ID', 'Boise', 43.6260, -116.2050], ['IL', 'Springfield', 39.7870, -89.6680], ['IN', 'Indianapolis', 39.8700, -86.1430], ['IA', 'Des Moines', 41.5900, -93.6700],
+  ['KS', 'Topeka', 39.0450, -95.7150], ['KY', 'Lexington', 38.0290, -84.4930], ['LA', 'Baton Rouge', 30.4440, -91.1680], ['ME', 'Portland', 43.6750, -70.2800],
+  ['MD', 'Annapolis', 38.9720, -76.4800], ['MA', 'Worcester', 42.2730, -71.8300], ['MI', 'Lansing', 42.7330, -84.5250], ['MN', 'Saint Paul', 44.9340, -93.1700],
+  ['MS', 'Jackson', 32.3150, -90.1730], ['MO', 'Kansas City', 39.0560, -94.5900], ['MT', 'Helena', 46.5900, -112.0390], ['NE', 'Lincoln', 40.8000, -96.6700],
+  ['NV', 'Reno', 39.5150, -119.8250], ['NH', 'Concord', 43.2080, -71.5480], ['NJ', 'Princeton', 40.3500, -74.6600], ['NM', 'Albuquerque', 35.0800, -106.6100],
+  ['NY', 'Albany', 42.6620, -73.7900], ['NC', 'Raleigh', 35.8070, -78.6440], ['ND', 'Bismarck', 46.8200, -100.7800], ['OH', 'Columbus', 40.0350, -83.0200],
+  ['OK', 'Oklahoma City', 35.5150, -97.5300], ['OR', 'Portland', 45.5270, -122.6260], ['PA', 'Lancaster', 40.0450, -76.3150], ['RI', 'Providence', 41.8320, -71.3980],
+  ['SC', 'Columbia', 33.9980, -81.0100], ['SD', 'Sioux Falls', 43.5370, -96.7400], ['TN', 'Nashville', 36.1300, -86.7980], ['TX', 'Austin', 30.3070, -97.7300],
+  ['UT', 'Salt Lake City', 40.7230, -111.8600], ['VT', 'Burlington', 44.4830, -73.2050], ['VA', 'Richmond', 37.5530, -77.4710], ['WA', 'Olympia', 47.0350, -122.8950],
+  ['WV', 'Charleston', 38.3400, -81.6500], ['WI', 'Madison', 43.0670, -89.4250], ['WY', 'Cheyenne', 41.1420, -104.8100]
+];
+let statesRunning = false, statesReport = [];
+async function runStateTests() {
+  if (statesRunning) return; statesRunning = true;
+  const box = $('ckAll'); box.textContent = ''; statesReport = [];
+  $('btnStatesRun').disabled = true; $('btnStatesCopy').disabled = true;
+  let done = 0; const counts = { ok: 0, warn: 0, bad: 0 };
+  const sum = () => { $('ckAllSummary').textContent = `${done} of ${STATE_TESTS.length} done · ${counts.ok} found property lines · ${counts.warn} no public map at that spot · ${counts.bad} failed`; };
+  sum();
+  probeDeg = 0.0008;
+  const tasks = STATE_TESTS.map(([st, city, lat, lng]) => async () => {
+    const set = ckRow(box, `${STATE_NAMES[st] || st} · ${city}`);
+    let status, text;
+    try {
+      const [hit, ms] = await timed(() => Promise.race([parcelAt(lat, lng), sleep(60000).then(() => { const e = new Error('Took over a minute'); e.name = 'AbortError'; throw e; })]));
+      const county = hit && hit.src.county ? hit.src.county + ': ' : '';
+      if (hit) { status = 'ok'; text = `${county}found, from "${hit.src.label}" · ${(ms / 1000).toFixed(1)} s`; }
+      else { status = 'warn'; text = `No public parcel map found at this spot · ${(ms / 1000).toFixed(1)} s`; }
+    } catch (e) { status = 'bad'; text = why(e); }
+    set(status, text); counts[status]++; done++; sum();
+    statesReport.push(`${status === 'ok' ? 'OK  ' : status === 'warn' ? 'NONE' : 'FAIL'} ${st} ${city}: ${text}`);
+  });
+  try { await pool(tasks, 4); } finally { probeDeg = 0; }
+  statesReport.sort((a, b) => a.slice(5).localeCompare(b.slice(5)));
+  $('btnStatesRun').disabled = false; $('btnStatesCopy').disabled = false; statesRunning = false;
+}
+$('btnStatesRun').onclick = () => runStateTests();
+$('btnStatesCopy').onclick = async () => {
+  const text = `Sunplot state test ${new Date().toLocaleString()} (${APP_VERSION})\n${$('ckAllSummary').textContent}\n` + statesReport.join('\n');
+  try { await navigator.clipboard.writeText(text); $('btnStatesCopy').textContent = 'Copied'; }
+  catch { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); $('btnStatesCopy').textContent = 'Copied'; } catch {} t.remove(); }
+  setTimeout(() => { $('btnStatesCopy').textContent = 'Copy results'; }, 2500);
+};
 function imgOK(src) { return new Promise((res, rej) => { const i = new Image(); const t = setTimeout(() => rej(new Error('Too slow')), 12000); i.onload = () => { clearTimeout(t); res(); }; i.onerror = () => { clearTimeout(t); rej(new Error('Image did not load')); }; i.src = src + (src.includes('?') ? '&' : '?') + 'v=' + Date.now(); }); }
 async function checkSpot() {
   const c = map.getCenter(), out = $('ckSpot');
@@ -2421,7 +2490,11 @@ let selId = null, placing = null, drawPts = [], need = 6;
 /* ---------- views ---------- */
 function show(view) {
   mode = view;
-  for (const v of ['vFind', 'vParcel', 'vDraw', 'vPlan', 'vReport', 'vRows', 'vTodo', 'vCheck']) $(v).hidden = v.toLowerCase() !== 'v' + view;
+  for (const v of ['vFind', 'vParcel', 'vDraw', 'vPlan', 'vReport', 'vRows', 'vTodo', 'vCheck', 'vLayers']) $(v).hidden = v.toLowerCase() !== 'v' + view;
+  if (gisReady) {   // (set once the map-layer code below has loaded)
+    if (view !== 'layers') leaveFreeLayers();
+    if (!P && (view === 'find' || view === 'parcel' || view === 'draw' || view === 'layers')) { applyBase(); applyOverlays(); }
+  }
   setSheet('open');
   $('btnFit').hidden = !(view === 'plan' || view === 'parcel' || view === 'report');
   $('sheet').querySelector('.body').scrollTop = 0;
@@ -2488,7 +2561,7 @@ $('bannerBtn').onclick = () => {
 $('coverage').textContent = `Property lines load from statewide maps in ${STATE_SOURCES.length - 1} states and DC, and from county maps found automatically everywhere else. Where no county map is public, you tap the corners of your land.`;
 
 /* ---------- backup and restore ---------- */
-const APP_VERSION = 'sunplot-v19', BACKUP_KEY = 'sunplot.lastBackup';
+const APP_VERSION = 'sunplot-v20', BACKUP_KEY = 'sunplot.lastBackup';
 function backupNote(n) {
   let last = 0; try { last = +localStorage.getItem(BACKUP_KEY) || 0; } catch {}
   $('btnBackup').hidden = !n;
@@ -2997,6 +3070,7 @@ function sel() { return P && P.items.find(i => i.id === selId) || null; }
 map.on('click', e => {
   const { lat, lng } = e.latlng;
   if (mode === 'draw') { drawPts.push([lat, lng]); renderDraw(); return; }
+  if (mode === 'layers') { whatsHere(lat, lng); return; }
   if (mode === 'find' || mode === 'parcel') { if (map.getZoom() < 15) { map.setView(e.latlng, Math.max(map.getZoom() + 3, 15)); return; } pickPoint(lat, lng, false); return; }
   if (mode !== 'plan') return;
   if (placing) {
@@ -3901,7 +3975,19 @@ const OVERLAYS = [
 const ovLayers = new Map();
 let baseExtra = null;
 
+/* Layer settings while browsing with no property open; kept on this phone. */
+const FREE_KEY = 'sunplot.freeGis';
+let FREE = (() => { try { return JSON.parse(localStorage.getItem(FREE_KEY)) || null; } catch { return null; } })() || { base: 'aerial', past: '', ov: {}, opacity: 0.6 };
+function saveGis() { if (P) saveProject(); else { try { localStorage.setItem(FREE_KEY, JSON.stringify(FREE)); } catch {} } }
+/** Where past photos are looked up: the open property, or the middle of the map while browsing. */
+function gisSpot() {
+  if (P) return P;
+  const c = map.getCenter(), s = FREE.spot;
+  if (!s || map.distance(c, [s.lat0, s.lng0]) > 3000) FREE.spot = { id: 'free', lat0: c.lat, lng0: c.lng, parcel: null };
+  return FREE.spot;
+}
 function gisState() {
+  if (!P) return FREE;
   P.gis = P.gis || { base: 'aerial', past: '', ov: {}, opacity: 0.6 };
   if (P.gis.past && !P.gis.past.includes(':')) P.gis.past = 'nc:' + P.gis.past; // older saves
   return P.gis;
@@ -3945,10 +4031,10 @@ async function waybackHere(lat, lng) {
 }
 function fmtMonth(d) { return `${MONTHS[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`; }
 /** Every past photo for the open place, newest first: [{key, label, year, make}]. */
-function pastOptions() {
-  const out = [], isNC = (P.parcel && P.parcel.state === 'NC') || inBox(STATE_BOX.NC, P.lat0, P.lng0);
-  const isKY = P.parcel ? P.parcel.state === 'KY' : inBox(KY_BOX, P.lat0, P.lng0);
-  for (const o of (P.pastPhotos && P.pastPhotos.list) || []) {
+function pastOptions(sp) {
+  const out = [], isNC = (sp.parcel && sp.parcel.state === 'NC') || inBox(STATE_BOX.NC, sp.lat0, sp.lng0);
+  const isKY = sp.parcel ? sp.parcel.state === 'KY' : inBox(KY_BOX, sp.lat0, sp.lng0);
+  for (const o of (sp.pastPhotos && sp.pastPhotos.list) || []) {
     const d = o.taken || o.d;
     out.push({ key: 'wb:' + o.n, year: +d.slice(0, 4), sort: d, label: `${fmtMonth(d)}${o.by ? ' · ' + o.by : ''}${o.taken ? '' : ' (added)'}`,
       make: () => L.tileLayer(WAYBACK.tile(o.n), { maxZoom: 22, maxNativeZoom: 19, attribution: `Esri World Imagery Wayback${o.by ? ', ' + o.by : ''}` }) });
@@ -3960,78 +4046,86 @@ function pastOptions() {
   return out.sort((a, b) => b.sort.localeCompare(a.sort));
 }
 let pastLoading = null;
-function loadPastPhotos() {
-  const pp = P.pastPhotos;
+function loadPastPhotos(sp) {
+  const pp = sp.pastPhotos;
   if (pp && Date.now() - pp.at < 30 * 864e5) return Promise.resolve();
-  if (pastLoading && pastLoading.id === P.id) return pastLoading.p;
-  const proj = P;
+  if (pastLoading && pastLoading.sp === sp) return pastLoading.p;
+  const proj = sp;
   const p = waybackHere(proj.lat0, proj.lng0)
-    .then(list => { proj.pastPhotos = { at: Date.now(), list }; if (proj === P) saveProject(); })
+    .then(list => { proj.pastPhotos = { at: Date.now(), list }; if (proj === P) saveProject(); else if (!P) saveGis(); })
     .catch(() => {})
     .finally(() => { if (pastLoading && pastLoading.p === p) pastLoading = null; });
-  pastLoading = { id: proj.id, p };
+  pastLoading = { sp: proj, p };
   return p;
 }
+let baseKey = 'aerial';
 function applyBase() {
-  const g = gisState();
-  if (baseExtra) { map.removeLayer(baseExtra); baseExtra = null; }
+  const g = gisState(), far = !P && map.getZoom() < 12, sp = g.base === 'past' && !far ? gisSpot() : null;
   let past = null, opts = [];
-  if (g.base === 'past') {
-    opts = pastOptions();
+  if (sp) {
+    opts = pastOptions(sp);
     past = opts.find(o => o.key === g.past) || opts[opts.length - 1] || null;  // default: the oldest
     if (past) g.past = past.key;
   }
   const aerialOn = g.base === 'aerial' || (g.base === 'past' && !past);
-  for (const l of [baseTiles, ncTiles]) { if (aerialOn && !map.hasLayer(l)) l.addTo(map); if (!aerialOn && map.hasLayer(l)) map.removeLayer(l); }
-  if (past) baseExtra = past.make().addTo(map);
-  else if (!aerialOn) { const b = BASEMAPS.find(x => x.id === g.base); if (b && b.make) baseExtra = b.make().addTo(map); }
-  if (baseExtra) baseExtra.bringToBack();
+  const want = past ? past.key : aerialOn ? 'aerial' : g.base;
+  if (want !== baseKey || (want !== 'aerial' && !baseExtra)) {   // only swap pictures when the choice changed
+    if (baseExtra) { map.removeLayer(baseExtra); baseExtra = null; }
+    for (const l of [baseTiles, ncTiles]) { if (aerialOn && !map.hasLayer(l)) l.addTo(map); if (!aerialOn && map.hasLayer(l)) map.removeLayer(l); }
+    if (past) baseExtra = past.make().addTo(map);
+    else if (!aerialOn) { const b = BASEMAPS.find(x => x.id === g.base); if (b && b.make) baseExtra = b.make().addTo(map); }
+    if (baseExtra) baseExtra.bringToBack();
+    baseKey = want;
+  }
   [...$('baseSeg').children].forEach(x => x.classList.toggle('on', x.dataset.id === g.base));
   $('baseTip').textContent = (BASEMAPS.find(x => x.id === g.base) || {}).tip || '';
   $('pastWrap').hidden = g.base !== 'past';
   if (g.base !== 'past') return;
+  if (!sp) { $('pastSel').hidden = $('pastOlder').hidden = $('pastNewer').hidden = true; $('pastNote').textContent = 'Zoom in on a spot to see its past photos.'; return; }
   const ps = $('pastSel'); ps.textContent = '';
   for (const o of opts) { const op = document.createElement('option'); op.value = o.key; op.textContent = o.label; ps.appendChild(op); }
   ps.hidden = !opts.length; if (past) ps.value = past.key;
   const i = past ? opts.indexOf(past) : -1;
   $('pastOlder').disabled = !(i >= 0 && i < opts.length - 1); $('pastNewer').disabled = !(i > 0);
   $('pastOlder').hidden = $('pastNewer').hidden = !opts.length;
-  const loading = !P.pastPhotos || Date.now() - P.pastPhotos.at >= 30 * 864e5;
+  const loading = !sp.pastPhotos || Date.now() - sp.pastPhotos.at >= 30 * 864e5;
   $('pastNote').textContent = loading ? 'Finding past photos of this spot…'
     : opts.length ? `${opts.length} photo${opts.length === 1 ? '' : 's'} of this spot. Dates are when the photo was taken${opts.some(o => o.key.startsWith('wb:')) ? '; "added" means the date it was published' : ''}.`
     : 'No past photos found here. Showing today\'s aerial.';
-  if (loading) {
-    const id = P.id;
-    loadPastPhotos().then(() => { if (P && P.id === id && gisState().base === 'past') applyBase(); });
-  }
+  if (loading) loadPastPhotos(sp).then(() => { if (gisSpot() === sp && gisState().base === 'past') applyBase(); });
 }
 let ovFor = null, ovPending = 0;
 function ovLoading(d) { ovPending = Math.max(0, ovPending + d); $('mapLoading').hidden = ovPending === 0; }
 function applyOverlays() {
   const g = gisState();
-  if (ovFor !== P.id) { for (const lay of ovLayers.values()) if (map.hasLayer(lay)) map.removeLayer(lay); ovLayers.clear(); ovPending = 0; ovLoading(0); ovFor = P.id; }
+  const key = P ? P.id : 'free';
+  if (ovFor !== key) { for (const lay of ovLayers.values()) if (map.hasLayer(lay)) map.removeLayer(lay); ovLayers.clear(); ovPending = 0; ovLoading(0); ovFor = key; }
   for (const o of OVERLAYS) {
     const on = !!g.ov[o.id], cb = $('ov-' + o.id);
     if (cb) cb.checked = on;
     let lay = ovLayers.get(o.id);
     if (on && !lay) {
       lay = o.make();
-      // only fetch map pictures around this property: far fewer requests
-      const bb = L.latLngBounds(P.boundary), c = bb.getCenter(), r = Math.max(0.015, (bb.getNorth() - bb.getSouth()) * 3);
-      lay.options.bounds = bb.extend([[c.lat - r, c.lng - r * 1.3], [c.lat + r, c.lng + r * 1.3]]);
+      if (P) {
+        // only fetch map pictures around this property: far fewer requests
+        const bb = L.latLngBounds(P.boundary), c = bb.getCenter(), r = Math.max(0.015, (bb.getNorth() - bb.getSouth()) * 3);
+        lay.options.bounds = bb.extend([[c.lat - r, c.lng - r * 1.3], [c.lat + r, c.lng + r * 1.3]]);
+      } else lay.options.minZoom = Math.max(lay.options.minZoom || 0, 11);   // browsing: county-size views and closer
       lay.on('tileloadstart', () => ovLoading(1)).on('tileload', () => ovLoading(-1)).on('tileerror', () => { ovLoading(-1); logProblem(`Layer "${o.name || o.id}" picture failed`); }).on('remove', () => { ovPending = 0; ovLoading(0); });
       ovLayers.set(o.id, lay);
     }
     if (lay) { lay.setOpacity(g.opacity); if (on && !map.hasLayer(lay)) lay.addTo(map); if (!on && map.hasLayer(lay)) map.removeLayer(lay); }
   }
   $('ovOpacity').value = Math.round(g.opacity * 100);
-  const n = OVERLAYS.filter(o => g.ov[o.id]).length + ['heat', 'shade', 'cont', 'parcels'].filter(k => P.layers[k]).length;
+  const n = OVERLAYS.filter(o => g.ov[o.id]).length + (P ? ['heat', 'shade', 'cont', 'parcels'].filter(k => P.layers[k]).length : 0);
   $('layerCount').textContent = n ? `${n} on` : '';
+  freeZoomNote();
 }
 function clearGisLayers() {
   for (const lay of ovLayers.values()) if (map.hasLayer(lay)) map.removeLayer(lay);
   ovLayers.clear(); ovFor = null; ovPending = 0; ovLoading(0);
   if (baseExtra) { map.removeLayer(baseExtra); baseExtra = null; }
+  baseKey = 'aerial';
   for (const l of [baseTiles, ncTiles]) if (!map.hasLayer(l)) l.addTo(map);
   hereMarker.remove(); $('here').hidden = true;
 }
@@ -4039,19 +4133,45 @@ function clearGisLayers() {
   const seg = $('baseSeg');
   for (const b of BASEMAPS) {
     const x = document.createElement('button'); x.type = 'button'; x.dataset.id = b.id; x.textContent = b.name; x.title = b.tip;
-    x.onclick = () => { gisState().base = b.id; applyBase(); saveProject(); };
+    x.onclick = () => { gisState().base = b.id; applyBase(); saveGis(); };
     seg.appendChild(x);
   }
   const ps = $('pastSel');
-  ps.onchange = () => { gisState().past = ps.value; applyBase(); saveProject(); };
+  ps.onchange = () => { gisState().past = ps.value; applyBase(); saveGis(); };
   const step = d => { const o = [...ps.options], i = o.findIndex(x => x.value === ps.value) + d; if (o[i]) { ps.value = o[i].value; ps.onchange(); } };
   $('pastOlder').onclick = () => step(1);
   $('pastNewer').onclick = () => step(-1);
-  for (const o of OVERLAYS) { const cb = $('ov-' + o.id); if (cb) cb.onchange = () => { gisState().ov[o.id] = cb.checked; applyOverlays(); saveProject(); }; }
+  for (const o of OVERLAYS) { const cb = $('ov-' + o.id); if (cb) cb.onchange = () => { gisState().ov[o.id] = cb.checked; applyOverlays(); saveGis(); }; }
   $('ovOpacity').oninput = () => { gisState().opacity = +$('ovOpacity').value / 100; applyOverlays(); };
-  $('ovOpacity').onchange = () => saveProject();
-  $('ovClear').onclick = () => { gisState().ov = {}; applyOverlays(); saveProject(); };
+  $('ovOpacity').onchange = () => saveGis();
+  $('ovClear').onclick = () => { gisState().ov = {}; applyOverlays(); saveGis(); };
 })();
+
+/* ----- layers while browsing ----- */
+const layersHome = { parent: $('tp-layers').parentNode, next: $('tp-layers').nextSibling };
+let layersFrom = 'find';
+function openFreeLayers() {
+  layersFrom = mode === 'layers' ? layersFrom : mode;
+  const t = $('tp-layers'); $('freeHost').appendChild(t); t.classList.add('free'); t.hidden = false;
+  show('layers'); setSheet('open');
+}
+function leaveFreeLayers() {
+  const t = $('tp-layers');
+  if (t.parentNode === layersHome.parent) return;
+  layersHome.parent.insertBefore(t, layersHome.next); t.classList.remove('free'); t.hidden = planTabNow !== 'layers';
+  hereMarker.remove(); $('here').hidden = true;
+}
+function freeZoomNote() { const g = gisState(); $('freeZoomNote').hidden = !!P || map.getZoom() >= 11 || !OVERLAYS.some(o => g.ov[o.id]); }
+map.on('zoomend', freeZoomNote);
+map.on('moveend', () => { if (!P && FREE.base === 'past' && (mode === 'find' || mode === 'parcel' || mode === 'layers' || mode === 'draw')) applyBase(); });
+$('btnLayers').onclick = () => {
+  if (P && (mode === 'plan' || mode === 'report' || mode === 'rows' || mode === 'todo')) { if (mode !== 'plan') show('plan'); planTab('layers'); setSheet('open'); return; }
+  if (mode === 'layers') { show(layersFrom); return; }
+  openFreeLayers();
+};
+$('btnLayersBack').onclick = () => show(layersFrom === 'layers' ? 'find' : layersFrom);
+var gisReady = true;
+if (!P && mode === 'find') { applyBase(); applyOverlays(); }
 
 /* ----- tabs ----- */
 let planTabNow = 'overview';
@@ -4143,12 +4263,17 @@ async function whatsHere(lat, lng) {
   card.hidden = false; list.textContent = '';
   $('hereWhere').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
   const row = label => { const r = document.createElement('div'); r.className = 'hrow'; r.innerHTML = '<small></small><b>…</b>'; r.firstChild.textContent = label; list.appendChild(r); return v => { if (seq === hereSeq) { r.lastChild.textContent = v; r.classList.toggle('dim', /^(Unavailable|None|–)/.test(v)); } }; };
-  const [x, y] = F.toXY(lat, lng), inside = inPoly(x, y, bXY);
-  const setSun = row('Sun, Apr–Sep');
-  const g = getSeasonGrid(), h = inside ? gridAt(g, x, y) : null;
-  setSun(h != null ? `${fmtH(h)} a day · ${sunVerdict(h)[1].toLowerCase()}` : 'Outside the property');
-  const setElev = row('Elevation'), setSlope = row('Slope');
-  if (P.terrain && inside) { const s = slopeAt(P.terrain, x, y); setSlope(`${s.pct.toFixed(1)}% · ${slopeWord(s.pct).toLowerCase()}`); } else setSlope('–');
+  if (P) {
+    const [x, y] = F.toXY(lat, lng), inside = inPoly(x, y, bXY);
+    const setSun = row('Sun, Apr–Sep');
+    const g = getSeasonGrid(), h = inside ? gridAt(g, x, y) : null;
+    setSun(h != null ? `${fmtH(h)} a day · ${sunVerdict(h)[1].toLowerCase()}` : 'Outside the property');
+  }
+  const setElev = row('Elevation');
+  if (P) {
+    const [x, y] = F.toXY(lat, lng), inside = inPoly(x, y, bXY), setSlope = row('Slope');
+    if (P.terrain && inside) { const s = slopeAt(P.terrain, x, y); setSlope(`${s.pct.toFixed(1)}% · ${slopeWord(s.pct).toLowerCase()}`); } else setSlope('–');
+  }
   getJSON(SVC.elevation, { method: 'POST', body: new URLSearchParams({ geometry: JSON.stringify({ points: [[lng, lat]], spatialReference: { wkid: 4326 } }), geometryType: 'esriGeometryMultipoint', returnFirstValueOnly: 'true', f: 'json' }) }, 10000)
     .then(j => { const v = parseFloat(j.samples && j.samples[0] && j.samples[0].value); setElev(isFinite(v) ? `${Math.round(v * FT_PER_M).toLocaleString()} ft` : 'Unavailable'); }).catch(() => setElev('Unavailable'));
   const setSoil = row('Soil');
