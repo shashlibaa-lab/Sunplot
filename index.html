@@ -839,6 +839,11 @@ input[type=range]{width:100%;accent-color:var(--sun);height:28px}
 .nights .cold{background:color-mix(in srgb,var(--bldg) 35%,var(--paper-2))}
 .rbtn{display:flex;align-items:center;justify-content:center;gap:8px}
 
+/* address suggestions */
+.suggest{display:grid;gap:2px;margin-top:-8px;background:var(--paper-2);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.suggest button{text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:11px 12px;font:500 .92rem var(--f-body);color:var(--ink);cursor:pointer}
+.suggest button:last-child{border-bottom:0}
+.suggest button:hover,.suggest button:focus-visible{background:var(--paper)}
 /* map source check */
 .cklist{display:grid;gap:6px}
 .ck{display:grid;grid-template-columns:12px minmax(0,1fr);gap:10px;align-items:start;padding:8px 10px;background:var(--paper-2);border-radius:8px;font-size:.88rem}
@@ -932,6 +937,7 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
         <input type="search" id="q" placeholder="Street address, city, state" aria-label="Address">
         <button class="btn primary" type="submit">Find</button>
       </form>
+      <div class="suggest" id="suggest" hidden></div>
       <p class="status" id="findStatus">Or zoom in on the map and tap your property.</p>
       <div class="list" id="results"></div>
       <div class="view" id="savedWrap" hidden>
@@ -1654,6 +1660,9 @@ const CONFIG = {
   /* Before launch, paste a Geoapify key here (geoapify.com). Left empty, address search uses
      OpenStreetMap's free Nominatim service, which is fine for testing but not for a paid app. */
   geoapifyKey: '',
+  /* Address search uses Esri's World Geocoder (fast, good rural coverage). Fine without a key for testing;
+     before launch, get a free ArcGIS Location Platform key and paste it here. */
+  esriKey: '',
   contact: '',  // optional support email shown on the printed plan
   /* Optional relay for county map servers that refuse requests from apps. Deploy relay/worker.js
      (see README) and paste its address here, e.g. 'https://sunplot-relay.yourname.workers.dev'. */
@@ -1667,6 +1676,7 @@ const SVC = {
   elevation: 'https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/getSamples',
   nominatim: 'https://nominatim.openstreetmap.org/search',
   geoapify: 'https://api.geoapify.com/v1/geocode/search',
+  esriGeocode: 'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer',
   sda: 'https://sdmdataaccess.sc.egov.usda.gov/Tabular/post.rest',
   fema: 'https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28',
   acis: 'https://data.rcc-acis.org/GridData',
@@ -1865,14 +1875,39 @@ async function searchParcels(text, states) {
   if (toks.length > 2 && SUFFIX_SET.has(toks[toks.length - 1])) toks = toks.slice(0, -1);
   const srcs = STATE_SOURCES.filter(s => s.addr && (!states.length || states.includes(s.st)));
   const runs = srcs.map(async s => {
-    const fs = await arcQuery(s.url, { where: `UPPER(${s.addr}) LIKE '${toks.join(' ').replace(/'/g, "''")}%'`, resultRecordCount: '5' }, 20000);
+    const like = toks.join(' ').replace(/'/g, "''");
+    const q = new URLSearchParams({ where: `${s.addr} LIKE '${like}%'`, outFields: '*', returnGeometry: 'true', outSR: '4326', resultRecordCount: '5', f: 'geojson' });
+    const j = await rawJSON(`${s.url}/query?${q}`, {}, 9000);
+    const fs = (j.features || []).map(f => f.properties || !f.attributes ? f : esriToGeo(f));
     return fs.filter(f => biggestRing(f.geometry)).slice(0, 5).map(f => ({ src: { kind: 'state', st: s.st, label: `${STATE_NAMES[s.st]} statewide parcels` }, f, layer: s.url }));
   });
   return (await Promise.allSettled(runs)).flatMap(r => r.status === 'fulfilled' ? r.value : []);
 }
 
 
-async function geocode(text) {
+/** Address search. Esri's World Geocoder first, OpenStreetMap as a backup. */
+async function geocode(text, magicKey) {
+  try {
+    const q = new URLSearchParams({ SingleLine: text, sourceCountry: 'USA', maxLocations: '6', outFields: 'Match_addr,Addr_type,Score', forStorage: 'false', f: 'json' });
+    if (magicKey) q.set('magicKey', magicKey);
+    if (CONFIG.esriKey) q.set('token', CONFIG.esriKey);
+    const j = await rawJSON(`${SVC.esriGeocode}/findAddressCandidates?${q}`, {}, 8000);
+    const out = (j.candidates || []).filter(c => c.score >= 75 && c.location).map(c => {
+      const parts = c.address.split(', ');
+      return { lat: c.location.y, lng: c.location.x, title: parts[0], sub: parts.slice(1).join(', '), score: c.score, exact: /PointAddress|Subaddress|StreetAddress|Parcel/.test(c.attributes && c.attributes.Addr_type || '') };
+    });
+    if (out.length) return out;
+  } catch { /* fall back */ }
+  return geocodeBackup(text);
+}
+/** Live suggestions while typing. */
+async function suggest(text) {
+  const q = new URLSearchParams({ text, countryCode: 'USA', maxSuggestions: '6', f: 'json' });
+  if (CONFIG.esriKey) q.set('token', CONFIG.esriKey);
+  const j = await rawJSON(`${SVC.esriGeocode}/suggest?${q}`, {}, 5000);
+  return (j.suggestions || []).filter(x => !x.isCollection);
+}
+async function geocodeBackup(text) {
   if (CONFIG.geoapifyKey) {
     const q = new URLSearchParams({ text, filter: 'countrycode:us', format: 'json', limit: '5', apiKey: CONFIG.geoapifyKey });
     const j = await getJSON(`${SVC.geoapify}?${q}`);
@@ -1977,7 +2012,8 @@ async function runChecks() {
     ['Flood maps (FEMA)', () => arcQuery(SVC.fema, { ...pointParams(tLat, tLng), outFields: 'FLD_ZONE', returnGeometry: 'false' }).then(fs => `Zone ${(fs[0] && fs[0].properties.FLD_ZONE) || 'none'} at the NC capitol`)],
     ['Frost records (NOAA ACIS)', () => getJSON(`${SVC.acis}?params=${encodeURIComponent(JSON.stringify({ loc: `${tLng},${tLat}`, sdate: '2020-01-01', edate: '2020-01-03', grid: '21', elems: [{ name: 'mint', interval: 'dly' }] }))}`).then(j => { if (!j.data) throw new Error('No data'); return 'Answers'; })],
     ['Weather forecast (NWS)', () => getJSON(`${SVC.nws}/points/${tLat},${tLng}`, { headers: { Accept: 'application/geo+json' } }).then(() => 'Answers')],
-    [CONFIG.geoapifyKey ? 'Address search (Geoapify)' : 'Address search (OpenStreetMap)', () => geocode('Raleigh, NC').then(g => { if (!g.length) throw new Error('No results'); return 'Answers'; })]
+    ['Address search (Esri World Geocoder)', () => rawJSON(`${SVC.esriGeocode}/findAddressCandidates?${new URLSearchParams({ SingleLine: '1 E Edenton St, Raleigh, NC', sourceCountry: 'USA', maxLocations: '1', forStorage: 'false', f: 'json', ...(CONFIG.esriKey ? { token: CONFIG.esriKey } : {}) })}`, {}, 10000).then(j => { if (!(j.candidates || []).length) throw new Error('No results'); return 'Answers'; })],
+    ['Address search backup (OpenStreetMap)', () => geocodeBackup('Raleigh, NC').then(g => { if (!g.length) throw new Error('No results'); return 'Answers'; })]
   ];
   const tasks = nationals.map(([name, fn]) => async () => {
     const set = ckRow(nat, name);
@@ -2083,27 +2119,58 @@ $('searchForm').onsubmit = async e => {
   e.preventDefault();
   const text = $('q').value.trim(); if (!text) return;
   $('q').blur();
+  runSearch(text);
+};
+let searchSeq = 0;
+async function runSearch(text, magicKey) {
+  const seq = ++searchSeq;
+  hideSuggest();
   const st = $('findStatus'); st.className = 'status'; st.textContent = 'Searching…';
   const box = $('results'); box.textContent = '';
-  const geoP = geocode(text);
-  let named = statesIn(text);
-  if (!named.length) { const gs = await geoP.catch(() => []); named = [...new Set(gs.flatMap(g => statesIn(`${g.title}, ${g.sub}`)))]; }
-  // search statewide address fields only in the state the address is in; if that's unknown, try them all
-  const addrStates = named.filter(st => STATE_SOURCES.some(s => s.st === st && s.addr));
-  const runSearch = named.length ? addrStates.length > 0 : /^\s*\d/.test(text);
-  const [pr, gr] = await Promise.allSettled([runSearch ? searchParcels(text, addrStates) : Promise.resolve([]), geoP]);
-  const items = [];
-  if (pr.status === 'fulfilled') for (const hit of pr.value) { const c = toCandidate(hit); items.push({ title: c.title, sub: `${c.sub} · ${fmtAcres(c.acres)}`, go: () => pickCandidate(c, true) }); }
-  if (gr.status === 'fulfilled') for (const g of gr.value.slice(0, items.length ? 2 : 5)) items.push({ title: g.title, sub: g.sub, go: () => pickPoint(g.lat, g.lng, true) });
-  if (!items.length) {
-    st.className = 'status err';
-    st.textContent = (pr.status === 'rejected' && gr.status === 'rejected') ? 'Can\'t reach the map services. Check your connection and try again.' : 'No match. Try the street number, street name and state, or tap your land on the map.';
+  let gs = [];
+  try { gs = await geocode(text, magicKey); } catch {}
+  if (seq !== searchSeq) return;
+  // one clear match: go straight there
+  if (gs.length && gs[0].exact && gs[0].score >= 95 && (gs.length === 1 || gs[1].score < gs[0].score - 3)) { st.textContent = ''; return pickPoint(gs[0].lat, gs[0].lng, true); }
+  for (const g of gs.slice(0, 5)) box.appendChild(listButton(g.title, g.sub, () => pickPoint(g.lat, g.lng, true)));
+  st.textContent = gs.length ? 'Pick the right one:' : 'Checking property records…';
+  // backup for rural addresses the address search doesn't know: the statewide parcel address field, in that state only
+  const named = statesIn(`${text}, ${gs.map(g => g.sub).join(', ')}`);
+  const addrStates = named.filter(x => STATE_SOURCES.some(s => s.st === x && s.addr));
+  if (!addrStates.length || (gs.length && gs[0].exact && gs[0].score >= 90)) {
+    if (!gs.length) { st.className = 'status err'; st.textContent = 'No match. Add the city and state, or zoom in and tap your land on the map.'; }
     return;
   }
-  st.textContent = items.length === 1 ? '' : 'Pick the right one:';
-  for (const it of items) box.appendChild(listButton(it.title, it.sub, it.go));
-  if (items.length === 1) items[0].go();
-};
+  const hits = await searchParcels(text, addrStates).catch(() => []);
+  if (seq !== searchSeq) return;
+  for (const h of hits) { const c = toCandidate(h); box.insertBefore(listButton(c.title, `${c.sub} · ${fmtAcres(c.acres)}`, () => pickCandidate(c, true)), box.firstChild); }
+  if (!gs.length && !hits.length) { st.className = 'status err'; st.textContent = 'No match. Add the city and state, or zoom in and tap your land on the map.'; return; }
+  st.textContent = box.children.length === 1 ? '' : 'Pick the right one:';
+  if (box.children.length === 1) box.firstChild.click();
+}
+
+/* Suggestions while typing */
+let sugTimer = 0, sugSeq = 0;
+function hideSuggest() { $('suggest').textContent = ''; $('suggest').hidden = true; }
+$('q').addEventListener('input', () => {
+  clearTimeout(sugTimer);
+  const t = $('q').value.trim();
+  if (t.length < 4) return hideSuggest();
+  sugTimer = setTimeout(async () => {
+    const seq = ++sugSeq;
+    let list = [];
+    try { list = await suggest(t); } catch { return; }
+    if (seq !== sugSeq || $('q').value.trim() !== t) return;
+    const box = $('suggest'); box.textContent = '';
+    for (const x of list) {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = x.text;
+      b.onclick = () => { $('q').value = x.text; $('q').blur(); runSearch(x.text, x.magicKey); };
+      box.appendChild(b);
+    }
+    box.hidden = !list.length;
+  }, 250);
+});
+$('q').addEventListener('blur', () => setTimeout(hideSuggest, 200));
 $('btnLocate').onclick = () => {
   if (!navigator.geolocation) return;
   navigator.geolocation.getCurrentPosition(

@@ -20,7 +20,7 @@ Open the web address. On iPhone: Share → Add to Home Screen. On Android: menu 
 
 ## 3. Before you charge money
 
-1. **Address search.** For testing it uses OpenStreetMap's free search, which doesn't allow heavy commercial use. Make an account at geoapify.com (or another paid geocoder), then paste the key into `CONFIG.geoapifyKey` near the top of the second `<script>` in `index.html`.
+1. **Address search.** It uses Esri's World Geocoder, with OpenStreetMap as a backup. It works without a key for testing. Before selling, make a free ArcGIS Location Platform account (developers.arcgis.com), create an API key with geocoding, and paste it into `CONFIG.esriKey` in `index.html`. The free tier covers 20,000 searches a month.
 2. **Support email.** Put it in `CONFIG.contact`. It prints on every plan.
 3. **Data credits.** Keep the map attribution (bottom-right of the map) visible. It credits USGS, NC OneMap and the state parcel sources.
 
