@@ -1,12 +1,12 @@
 /* Sunplot service worker: makes the app installable, opens offline, and keeps
    recently viewed aerial photos so saved places still show a map without signal.
    Property, elevation and address lookups always go to the network. */
-const VERSION = 'sunplot-v13';
+const VERSION = 'sunplot-v14';
 const SHELL = [
   './', './index.html', './privacy.html', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'
 ];
-const TILE_CACHE = 'sunplot-tiles', TILE_LIMIT = 800;
+const TILE_CACHE = 'sunplot-tiles', TILE_LIMIT = 1500;
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -16,11 +16,13 @@ self.addEventListener('activate', e => {
 });
 
 const isTile = url => /\/tile\/\d+\/\d+\/\d+/.test(url.pathname);
+const isExport = url => /\/(MapServer\/export|ImageServer\/exportImage)$/i.test(url.pathname);
 const isShell = url => url.origin === self.location.origin || url.hostname.endsWith('gstatic.com') || url.hostname === 'fonts.googleapis.com';
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
+  if (isExport(url)) { e.respondWith(picture(e.request)); return; }
   if (isTile(url)) { e.respondWith(tile(e.request)); return; }
   if (e.request.mode === 'navigate' || url.pathname.endsWith('/index.html')) { e.respondWith(page(e.request)); return; }
   if (isShell(url)) { e.respondWith(shell(e.request)); return; }
@@ -53,6 +55,14 @@ async function tile(req) {
   } catch {
     return (await cache.match(req)) || Response.error();
   }
+}
+/* Overlay pictures (flood, soil, slope…) rarely change: answer from the phone when we have them. */
+async function picture(req) {
+  const cache = await caches.open(TILE_CACHE);
+  const hit = await cache.match(req);
+  if (hit) return hit;
+  try { const r = await fetch(req); if (r.ok) { cache.put(req, r.clone()); trim(cache); } return r; }
+  catch { return Response.error(); }
 }
 let trimming = false;
 async function trim(cache) {
