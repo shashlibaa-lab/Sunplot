@@ -1,1 +1,72 @@
-# Sunplot
+# Sunplot — launch steps
+
+Sunplot is a web app. Everything it needs is in this folder:
+
+- `index.html` – the whole app
+- `manifest.webmanifest`, `sw.js`, `icons/` – make it installable on a phone and let it open without signal
+
+## 1. Put it online (free)
+
+Pick one:
+
+- **Netlify:** on a computer, open app.netlify.com/drop, sign up, and drag this whole folder onto the page. You get a web address right away.
+- **GitHub Pages:** put the folder in a GitHub repository and turn on Pages in the repository settings.
+
+It has to be served over `https://` for install and offline mode to work. Opening the file straight off your computer won't load the maps.
+
+## 2. Try it on your phone
+
+Open the web address. On iPhone: Share → Add to Home Screen. On Android: menu → Install app.
+
+## 3. Before you charge money
+
+1. **Address search.** For testing it uses OpenStreetMap's free search, which doesn't allow heavy commercial use. Make an account at geoapify.com (or another paid geocoder), then paste the key into `CONFIG.geoapifyKey` near the top of the second `<script>` in `index.html`.
+2. **Support email.** Put it in `CONFIG.contact`. It prints on every plan.
+3. **Data credits.** Keep the map attribution (bottom-right of the map) visible. It credits USGS, NC OneMap and the state parcel sources.
+
+## 4. App stores
+
+1. Go to pwabuilder.com and enter your web address. It checks the app and builds the store packages.
+2. **Google Play:** one-time developer fee. Upload the Android package PWABuilder makes and set the price.
+3. **Apple App Store:** yearly developer fee, and you need a Mac with Xcode to build the iPhone package. Apple sometimes rejects apps that look like a plain website, so lead the listing with the sun-hours and garden-finder features.
+4. Each store takes 15% for small developers once you enroll in its small-business program.
+
+## 5. Property lines across the US
+
+The app finds property lines in this order:
+
+1. **Statewide parcel maps** in 22 states and DC: North Carolina, Virginia, Wisconsin, Indiana, Delaware, New York, Florida, Washington, Texas, Arkansas, West Virginia, Montana, Maryland, New Jersey, Massachusetts, Connecticut, Vermont, New Hampshire, Hawaii, Colorado, Wyoming, Utah (county by county) and DC.
+2. **County map finder** everywhere else. The app looks up the county (US Census), searches ArcGIS Online, the public catalog most counties publish their parcel maps to, tries the best matches, and remembers the one that works for that county on that phone.
+3. **Tap the corners** where a county doesn't publish its parcels at all.
+
+Before launch, open **Check map sources** (bottom of the first screen) on a phone and on a computer. It tests every service from that device. Then zoom into a few properties in states without a statewide map and tap **Test the spot on the map**.
+
+Coverage limits:
+- Some counties only publish through paid viewers (Beacon, qPublic and similar). No free app can read those, so users there tap their corners.
+- Statewide layers in some states are missing a few counties (Washington, West Virginia, Arkansas, New York and Vermont say so in their own notes). The county finder covers many of those gaps.
+- Parcel fields differ by county. The app reads addresses, IDs, acres and values by pattern. Owner names are never shown.
+
+### Adding another state
+
+Add one line to `STATE_SOURCES` in `index.html`: the state, the parcel layer address (`…/MapServer/0` or `…/FeatureServer/0`), and the site-address field if it has one. A whole service (`kind: 'service'`) works too; the app finds its parcel layer.
+
+### Turning on the relay
+
+A few county servers refuse requests that come straight from an app (they show as "Blocked" in Check map sources). The relay passes those through.
+
+1. Make a free Cloudflare account.
+2. Install Node.js, then run `npx wrangler deploy` inside the `relay` folder. It prints an address like `https://sunplot-relay.yourname.workers.dev`.
+3. Paste that address into `CONFIG.relay` in `index.html` and upload the app again.
+
+The relay only forwards map and data services, and caches answers for a day. The free plan covers 100,000 requests a day.
+
+## Planning beds
+
+Tap a bed on the map, then **Plan rows and crops**. Each bed is split into rows (30 in planted, 18 in paths by default; change it under Bed setup, or turn the rows across the bed). Tap a row to add a crop: the app suggests dates from the property's frost dates, finds open space in the row, splits successions into equal plantings, and counts plants and seeds. **Planting calendar and seed list** on the map screen shows every task week by week and the seeds to buy. The crop list and its typical spacing and timing live in `CROP_LIB` in `index.html`.
+
+## Data sources
+
+- Property lines: the 23 statewide services listed in `STATE_SOURCES`, plus county parcel maps found through ArcGIS Online search; county lookup from US Census TIGERweb
+- Aerial photos: NC OneMap (North Carolina), USGS National Map (everywhere)
+- Elevation: USGS 3DEP (everywhere in the US)
+- Property report: USDA NRCS Soil Data Access (soils), FEMA National Flood Hazard Layer (flood zones), NOAA ACIS / PRISM daily lows 1991–2020 (frost dates and hardiness zone), National Weather Service (7-night forecast). All free and nationwide.
