@@ -954,6 +954,15 @@ input[type=range]{width:100%;accent-color:var(--sun);height:28px}
 .note.ok{color:var(--ok)} .note.bad{color:var(--bad)}
 /* bed planner */
 .sheet.tall{max-height:88dvh}
+/* swipe the panel down for a full-screen map */
+.sheet{--down-shift:calc(100% - 30px - env(safe-area-inset-bottom,0px))}
+.sheet.down{transform:translateY(var(--down-shift))}
+.sheet.down .body{visibility:hidden;transition:visibility 0s .25s}
+.sheet.down .grab{padding:10px 0 15px}
+.sheet.down .grab span{width:56px;background:var(--muted)}
+.sheet.dragging{transition:none!important}
+.sheet .grab{touch-action:none}
+@media (min-width:820px){.sheet.down{transform:none}.sheet.down .body{visibility:visible}}
 select,input[type=date]{width:100%;font:500 1rem var(--f-body);color:var(--ink);background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:10px 11px;min-height:46px}
 .rows{display:grid;gap:3px}
 .dims input,.dims select,input[type=date]{min-width:0}
@@ -991,7 +1000,7 @@ table.ledger{border-collapse:collapse;width:100%;font-size:.86rem}
 .ledger td{padding:6px;border-bottom:1px solid var(--paper-2)}
 .ledger .n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 .ledger .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px;border:1px solid rgba(0,0,0,.15)}
-@media (prefers-reduced-motion:no-preference){.sheet{transition:max-height .2s ease}}
+@media (prefers-reduced-motion:no-preference){.sheet{transition:max-height .2s ease,transform .25s cubic-bezier(.2,.8,.2,1)}}
 
 /* printable plan */
 #print{display:none}
@@ -2289,7 +2298,7 @@ let selId = null, placing = null, drawPts = [], need = 6;
 function show(view) {
   mode = view;
   for (const v of ['vFind', 'vParcel', 'vDraw', 'vPlan', 'vReport', 'vRows', 'vTodo', 'vCheck']) $(v).hidden = v.toLowerCase() !== 'v' + view;
-  $('sheet').classList.remove('min');
+  setSheet('open');
   $('btnFit').hidden = !(view === 'plan' || view === 'parcel' || view === 'report');
   $('sheet').querySelector('.body').scrollTop = 0;
   $('sheet').classList.toggle('tall', view === 'rows' || view === 'todo' || view === 'check');
@@ -2297,16 +2306,65 @@ function show(view) {
   if (view === 'find') renderSaved(); else { lySaved.clearLayers(); if (selecting) stopSelect(); }
   if (view === 'plan') markSeason();
 }
-$('grab').onclick = () => $('sheet').classList.toggle('min');
+/* ---------- bottom panel: open, peek (min) or down (full-screen map). Swipe or tap the handle. ---------- */
+function sheetState() { const c = $('sheet').classList; return c.contains('down') ? 'down' : c.contains('min') ? 'min' : 'open'; }
+function setSheet(st) {
+  const c = $('sheet').classList;
+  c.toggle('min', st === 'min'); c.toggle('down', st === 'down');
+  $('grab').setAttribute('aria-expanded', String(st === 'open'));
+  $('grab').setAttribute('aria-label', st === 'down' ? 'Show panel' : 'Hide panel for a full-screen map');
+  document.body.classList.toggle('mapfull', st === 'down');
+}
+$('grab').onclick = () => { if (dragMoved) { dragMoved = false; return; } setSheet(sheetState() === 'open' ? 'down' : 'open'); };
+let dragMoved = false;
+(() => {
+  const sh = $('sheet'), body = sh.querySelector('.body');
+  let y0 = 0, x0 = 0, t0 = 0, dy = 0, active = false, decided = false, start = 'open';
+  const skip = el => el.closest('input,select,textarea,.leaflet-container');
+  sh.addEventListener('touchstart', e => {
+    if (window.innerWidth >= 820 || e.touches.length !== 1 || skip(e.target)) { active = false; return; }
+    const t = e.touches[0]; y0 = t.clientY; x0 = t.clientX; t0 = performance.now(); dy = 0; active = true; decided = false; dragMoved = false; start = sheetState();
+  }, { passive: true });
+  sh.addEventListener('touchmove', e => {
+    if (!active) return;
+    const t = e.touches[0], ddy = t.clientY - y0, ddx = t.clientX - x0;
+    if (!decided) {
+      if (Math.abs(ddy) < 8 && Math.abs(ddx) < 8) return;
+      decided = true;
+      const onHandle = !!e.target.closest('.grab');
+      const vertical = Math.abs(ddy) > Math.abs(ddx) * 1.2;
+      // drag the panel: pulling down from the top of the list, or pulling up when it's lowered
+      const ok = vertical && (onHandle || (ddy > 0 && body.scrollTop <= 0) || (ddy < 0 && start !== 'open'));
+      if (!ok) { active = false; return; }
+      sh.classList.add('dragging');
+    }
+    e.preventDefault();
+    dy = ddy; dragMoved = true;
+    const shift = start === 'down' ? Math.min(0, dy) : Math.max(start === 'open' ? 0 : -Infinity, dy);
+    sh.style.transform = start === 'down' ? `translateY(calc(var(--down-shift) + ${shift}px))` : `translateY(${Math.max(dy, -40)}px)`;
+  }, { passive: false });
+  const end = () => {
+    if (!active) return; active = false;
+    sh.classList.remove('dragging'); sh.style.transform = '';
+    if (!decided) return;
+    const v = dy / Math.max(1, performance.now() - t0); // px per ms
+    if (dy > 60 || v > 0.5) setSheet('down');
+    else if (dy < -40 || v < -0.5) setSheet('open');
+    else setSheet(start);
+    setTimeout(() => { dragMoved = false; }, 350);
+  };
+  sh.addEventListener('touchend', end);
+  sh.addEventListener('touchcancel', end);
+})();
 function banner(text, btn = 'Cancel') { $('banner').hidden = !text; $('bannerText').textContent = text || ''; $('bannerBtn').textContent = btn; document.body.classList.toggle('placing', !!text); }
 $('bannerBtn').onclick = () => {
   if (mode === 'draw') return $('btnDrawCancel').onclick();
-  placing = null; banner(null); $('sheet').classList.remove('min');
+  placing = null; banner(null); setSheet('open');
 };
 $('coverage').textContent = `Property lines load from statewide maps in ${STATE_SOURCES.length - 1} states and DC, and from county maps found automatically everywhere else. Where no county map is public, you tap the corners of your land.`;
 
 /* ---------- backup and restore ---------- */
-const APP_VERSION = 'sunplot-v16', BACKUP_KEY = 'sunplot.lastBackup';
+const APP_VERSION = 'sunplot-v17', BACKUP_KEY = 'sunplot.lastBackup';
 function backupNote(n) {
   let last = 0; try { last = +localStorage.getItem(BACKUP_KEY) || 0; } catch {}
   $('btnBackup').hidden = !n;
@@ -2549,7 +2607,7 @@ $('selMap').onclick = () => {
   }
   if (!ids.length) return;
   const ring = ids.flatMap(i => DB.projects[i].boundary);
-  $('sheet').classList.add('min'); fitRing(ring);
+  setSheet('min'); fitRing(ring);
   savedStatus(`Showing ${plural(ids.length, 'place')} on the map. Tap an outline to open it.`);
 };
 function listButton(title, sub, go) {
@@ -2806,7 +2864,7 @@ for (const [btn, type] of [['addBed', 'bed'], ['addTree', 'tree'], ['addBldg', '
     placing = type;
     if (type === 'bed') banner('Tap where the bed goes', 'Cancel');
     else banner(type === 'tree' ? `Tap each tree · ${P.treeDefault.name}` : `Tap each building · ${P.bldgDefault.name}`, 'Done');
-    if (window.innerWidth < 820) $('sheet').classList.add('min');
+    if (window.innerWidth < 820) setSheet('min');
   };
 }
 function sel() { return P && P.items.find(i => i.id === selId) || null; }
@@ -2818,7 +2876,7 @@ map.on('click', e => {
   if (mode !== 'plan') return;
   if (placing) {
     const [x, y] = F.toXY(lat, lng), t = placing;
-    if (t === 'bed') { placing = null; banner(null); $('sheet').classList.remove('min'); }
+    if (t === 'bed') { placing = null; banner(null); setSheet('open'); }
     addItem(t, x, y);
     if (t !== 'bed') banner(`${P.items.filter(i => i.type === t).length} added · tap more`, 'Done');
     return;
@@ -3788,7 +3846,7 @@ function planTab(t) {
   if (t === 'overview' && P) renderDash();
   $('sheet').querySelector('.body').scrollTop = 0;
 }
-for (const x of $('planTabs').children) x.onclick = () => { planTab(x.dataset.tab); $('sheet').classList.remove('min'); };
+for (const x of $('planTabs').children) x.onclick = () => { planTab(x.dataset.tab); setSheet('open'); };
 
 /* ----- overview tiles ----- */
 let dashLoading = null;
